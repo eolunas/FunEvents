@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/clients/">
+    <Project Path="clients/FunEvents.ConsoleClient/FunEvents.ConsoleClient.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/FunEvents.Api/FunEvents.Api.csproj" />
+    <Project Path="src/FunEvents.Application/FunEvents.Application.csproj" />
+    <Project Path="src/FunEvents.Domain/FunEvents.Domain.csproj" />
+    <Project Path="src/FunEvents.Infrastructure/FunEvents.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FunEvents.IntegrationTests/FunEvents.IntegrationTests.csproj" />
+    <Project Path="tests/FunEvents.UnitTests/FunEvents.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,82 @@
+name: funevents
+
+# Arranque completo en un comando:
+#
+#   docker compose up --build
+#
+# Deja PostgreSQL y la API en marcha. Swagger en http://localhost:8080/swagger
+#
+# El cliente de consola se ejecuta aparte (necesita terminal interactiva):
+#
+#   dotnet run --project clients/FunEvents.ConsoleClient
+#   dotnet run --project clients/FunEvents.ConsoleClient -- --demo
+#
+# ---------------------------------------------------------------------------
+# PUERTOS
+#
+# Los puertos del host son configurables por variable de entorno. Si en tu
+# maquina ya hay algo escuchando (muy habitual con PostgreSQL instalado en el
+# sistema, que ocupa el 5432), no hace falta tocar este fichero:
+#
+#   FUNEVENTS_API_PORT=9090 FUNEVENTS_DB_PORT=55432 docker compose up --build
+#
+# La base de datos NO se publica en el 5432 por defecto justo por eso. La API
+# no lo necesita: dentro de la red de compose habla con `db:5432` directamente,
+# asi que el mapeo al host solo sirve para inspeccionar con psql o DBeaver.
+# ---------------------------------------------------------------------------
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: funevents
+      POSTGRES_USER: funevents
+      POSTGRES_PASSWORD: funevents
+    ports:
+      - "${FUNEVENTS_DB_PORT:-55432}:5432"
+    volumes:
+      - funevents-data:/var/lib/postgresql/data
+    healthcheck:
+      # La API espera a que esto pase: sin el healthcheck, arranca antes de que
+      # PostgreSQL acepte conexiones y falla al crear el esquema.
+      test: ["CMD-SHELL", "pg_isready -U funevents -d funevents"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  api:
+    build:
+      context: .
+      dockerfile: src/FunEvents.Api/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      # Doble guion bajo = separador de seccion en la configuracion de .NET.
+      # El host es `db`, el nombre del servicio: dentro de la red de compose se
+      # resuelve por DNS y el puerto es siempre el 5432 del contenedor,
+      # independientemente de como se haya mapeado al host.
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=funevents;Username=funevents;Password=funevents"
+      # Ventana de retencion corta para poder ver caducar una reserva en la demo.
+      ReservationPolicy__HoldWindow: "00:02:00"
+      ReservationExpiration__PollingInterval: "00:00:10"
+    ports:
+      - "${FUNEVENTS_API_PORT:-8080}:8080"
+    # Sin healthcheck a proposito: la imagen base de ASP.NET no incluye curl ni
+    # wget, y un healthcheck que siempre falla es peor que no tenerlo. El
+    # endpoint /health esta disponible para el orquestador real (en Kubernetes
+    # la sonda la hace el kubelet, no un binario dentro del contenedor).
+
+# Sin `container_name` en ningun servicio, tambien a proposito: fijar el nombre
+# impide levantar dos instancias del proyecto y provoca colisiones con
+# contenedores antiguos que se quedaron por ahi. Compose los nombra
+# funevents-db-1 y funevents-api-1, y se accede a ellos por servicio:
+#
+#   docker compose logs -f api
+#   docker compose exec db psql -U funevents -d funevents
+
+volumes:
+  funevents-data:

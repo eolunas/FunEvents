@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    # Un cambio que solo toca la documentacion no necesita compilar la solucion
+    # ni levantar contenedores. De eso se encarga el workflow de Pages.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build + tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Tests unitarios
+        run: dotnet test tests/FunEvents.UnitTests -c Release --no-build --verbosity normal
+
+      # Los tests de integracion levantan PostgreSQL con Testcontainers, que usa
+      # el demonio Docker ya disponible en el runner de GitHub.
+      - name: Tests de integracion
+        run: dotnet test tests/FunEvents.IntegrationTests -c Release --no-build --verbosity normal
+
+  docker:
+    name: Imagen de la API
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Verifica que el Dockerfile construye. Sin push: aqui solo interesa que
+      # cualquiera pueda hacer `docker compose up` y que funcione.
+      - name: Construir imagen
+        run: docker build -f src/FunEvents.Api/Dockerfile -t funevents-api:ci .

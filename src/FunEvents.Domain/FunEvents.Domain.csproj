@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Domain no referencia NADA. Ni EF Core, ni ASP.NET, ni paquetes de terceros.
+    Es la regla de dependencia de Clean Architecture y aqui se cumple literalmente:
+    si este .csproj crece, la arquitectura se esta rompiendo.
+  -->
+
+</Project>

@@ -1,0 +1,2009 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FunEvents — Arquitectura y prototipo de venta de entradas</title>
+<meta name="description" content="Documento de arquitectura y prototipo funcional de una plataforma multicanal de venta y reserva de entradas. .NET 10, ASP.NET Core, PostgreSQL 16.">
+<style>
+  :root{
+    --bg:#ffffff;
+    --surface:#f7f8fa;
+    --surface-2:#eef1f5;
+    --text:#15181d;
+    --muted:#5c6672;
+    --accent:#1f5fa9;
+    --accent-soft:#e8f0fa;
+    --border:#e2e7ed;
+    --code-bg:#f5f7f9;
+    --ok:#15803d;
+    --ok-soft:#e8f5ec;
+    --warn:#a16207;
+    --warn-soft:#fdf6e3;
+    --danger:#b42318;
+    --danger-soft:#fdecea;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --sidebar:290px;
+    --maxw:820px;
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth; scroll-padding-top:24px}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans); font-size:16.5px; line-height:1.68;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------------- Layout ---------------- */
+  .layout{display:flex; min-height:100vh}
+
+  aside{
+    width:var(--sidebar); flex:0 0 var(--sidebar);
+    border-right:1px solid var(--border); background:var(--surface);
+    position:sticky; top:0; height:100vh; overflow-y:auto; padding:26px 0 60px;
+  }
+  aside .brand{padding:0 24px 18px; border-bottom:1px solid var(--border); margin-bottom:14px}
+  aside .brand .logo{font-size:1.18rem; font-weight:700; letter-spacing:-.02em}
+  aside .brand .sub{font-size:.78rem; color:var(--muted); margin-top:3px; line-height:1.45}
+  aside nav{padding:0 12px}
+  aside .group{
+    font-size:.68rem; text-transform:uppercase; letter-spacing:.09em;
+    color:var(--muted); font-weight:700; padding:16px 12px 6px;
+  }
+  aside a{
+    display:block; padding:5px 12px; border-radius:6px; text-decoration:none;
+    color:#3d4650; font-size:.855rem; border-left:2px solid transparent; line-height:1.4;
+  }
+  aside a:hover{background:var(--surface-2); color:var(--text)}
+  aside a.active{background:var(--accent-soft); color:var(--accent); font-weight:600; border-left-color:var(--accent)}
+
+  main{flex:1; min-width:0; padding:0 48px 120px}
+  .wrap{max-width:var(--maxw); margin:0 auto}
+
+  /* ---------------- Hero ---------------- */
+  header.hero{border-bottom:1px solid var(--border); padding:56px 0 40px; margin-bottom:14px}
+  header.hero .kicker{
+    font-size:.72rem; text-transform:uppercase; letter-spacing:.14em;
+    color:var(--accent); font-weight:700; margin-bottom:14px;
+  }
+  header.hero h1{font-size:2.5rem; line-height:1.15; margin:0 0 14px; letter-spacing:-.028em; font-weight:700}
+  header.hero p.lead{font-size:1.12rem; color:var(--muted); margin:0 0 26px; max-width:62ch}
+  .stackline{display:flex; flex-wrap:wrap; gap:7px}
+  .chip{
+    font-size:.755rem; padding:4px 10px; border-radius:20px;
+    background:var(--surface); border:1px solid var(--border); color:#48515c; white-space:nowrap;
+  }
+
+  /* ---------------- Typography ---------------- */
+  section{padding-top:46px; scroll-margin-top:20px}
+  h2{
+    font-size:1.62rem; letter-spacing:-.022em; margin:0 0 6px; font-weight:700;
+    padding-bottom:9px; border-bottom:1px solid var(--border);
+  }
+  h2 .num{color:var(--accent); font-variant-numeric:tabular-nums; margin-right:10px; font-weight:700}
+  h3{font-size:1.14rem; margin:34px 0 8px; letter-spacing:-.012em; font-weight:650}
+  h4{font-size:.99rem; margin:24px 0 6px; font-weight:650; color:#2b333d}
+  p{margin:0 0 14px}
+  a{color:var(--accent)}
+  ul,ol{margin:0 0 14px; padding-left:22px}
+  li{margin-bottom:5px}
+  strong{font-weight:650}
+  .muted{color:var(--muted)}
+  .small{font-size:.88rem}
+
+  /* ---------------- Code ---------------- */
+  code{
+    font-family:var(--mono); font-size:.855em; background:var(--code-bg);
+    padding:1.5px 5px; border-radius:4px; border:1px solid var(--border); color:#0f4c81;
+  }
+  pre{
+    background:var(--code-bg); border:1px solid var(--border); border-radius:8px;
+    padding:15px 17px; overflow-x:auto; margin:0 0 16px; line-height:1.55;
+  }
+  pre code{background:none; border:none; padding:0; font-size:.83rem; color:#232a33}
+  pre .c{color:#7b8794; font-style:italic}
+  pre .k{color:#a02b93}
+  pre .s{color:#0a7a4b}
+
+  /* ---------------- Tables ---------------- */
+  .tablewrap{overflow-x:auto; margin:0 0 18px}
+  table{border-collapse:collapse; width:100%; font-size:.885rem}
+  th,td{text-align:left; padding:9px 13px; border-bottom:1px solid var(--border); vertical-align:top}
+  th{background:var(--surface); font-weight:650; font-size:.79rem; text-transform:uppercase; letter-spacing:.04em; color:#48515c}
+  tbody tr:last-child td{border-bottom:none}
+  td code{font-size:.8rem}
+
+  /* ---------------- Callouts ---------------- */
+  .note{
+    border-left:3px solid var(--accent); background:var(--accent-soft);
+    padding:13px 17px; border-radius:0 7px 7px 0; margin:0 0 18px; font-size:.93rem;
+  }
+  .note.ok{border-color:var(--ok); background:var(--ok-soft)}
+  .note.warn{border-color:var(--warn); background:var(--warn-soft)}
+  .note.danger{border-color:var(--danger); background:var(--danger-soft)}
+  .note p:last-child{margin-bottom:0}
+  .note .label{
+    display:block; font-size:.7rem; text-transform:uppercase; letter-spacing:.09em;
+    font-weight:700; margin-bottom:5px; color:var(--accent);
+  }
+  .note.ok .label{color:var(--ok)}
+  .note.warn .label{color:var(--warn)}
+  .note.danger .label{color:var(--danger)}
+
+  /* ---------------- Badges ---------------- */
+  .badge{
+    display:inline-block; font-size:.685rem; font-weight:700; padding:2px 8px;
+    border-radius:20px; text-transform:uppercase; letter-spacing:.05em; vertical-align:middle;
+  }
+  .badge.done{background:var(--ok-soft); color:var(--ok)}
+  .badge.design{background:var(--warn-soft); color:var(--warn)}
+  .badge.out{background:var(--surface-2); color:var(--muted)}
+
+  /* ---------------- Cards ---------------- */
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:13px; margin:0 0 20px}
+  .card{border:1px solid var(--border); border-radius:9px; padding:15px 17px; background:var(--bg)}
+  .card h4{margin:0 0 5px; font-size:.94rem}
+  .card p{margin:0; font-size:.87rem; color:var(--muted)}
+
+  /* ---------------- Diagrams ---------------- */
+  .diagram{
+    border:1px solid var(--border); border-radius:9px; background:var(--surface);
+    padding:20px 14px; margin:0 0 8px; overflow-x:auto; text-align:center;
+  }
+  figure{margin:0}
+  figcaption{font-size:.82rem; color:var(--muted); margin:0 0 20px; text-align:center}
+
+  /* ---------------- ADR ---------------- */
+  details.adr{border:1px solid var(--border); border-radius:8px; margin-bottom:9px; background:var(--bg)}
+  details.adr>summary{
+    cursor:pointer; padding:11px 16px; font-weight:600; font-size:.94rem;
+    list-style:none; display:flex; align-items:center; gap:11px;
+  }
+  details.adr>summary::-webkit-details-marker{display:none}
+  details.adr>summary::before{content:"\25B8"; color:var(--accent); font-size:.85rem; transition:transform .15s}
+  details.adr[open]>summary::before{transform:rotate(90deg)}
+  details.adr>summary:hover{background:var(--surface)}
+  details.adr .body{padding:2px 16px 15px 40px; font-size:.92rem; border-top:1px solid var(--border)}
+  details.adr .body dl{margin:12px 0 0; display:grid; grid-template-columns:auto 1fr; gap:6px 14px}
+  details.adr .body dt{font-weight:650; color:#39424d; font-size:.84rem; white-space:nowrap}
+  details.adr .body dd{margin:0}
+  .adr-id{
+    font-family:var(--mono); font-size:.76rem; background:var(--surface-2);
+    padding:2px 7px; border-radius:4px; color:#48515c;
+  }
+
+  /* ---------------- Steps ---------------- */
+  ol.steps{list-style:none; padding:0; counter-reset:s}
+  ol.steps>li{counter-increment:s; position:relative; padding-left:42px; margin-bottom:26px}
+  ol.steps>li::before{
+    content:counter(s); position:absolute; left:0; top:1px;
+    width:27px; height:27px; border-radius:50%; background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:.83rem; font-weight:700;
+  }
+  ol.steps>li>h3{margin-top:0}
+
+  /* ---------------- Footer ---------------- */
+  footer{
+    margin-top:70px; padding-top:22px; border-top:1px solid var(--border);
+    font-size:.84rem; color:var(--muted);
+  }
+
+  /* ---------------- Mobile ---------------- */
+  .navtoggle{display:none}
+  @media (max-width:1000px){
+    aside{
+      position:fixed; left:0; top:0; z-index:50; transform:translateX(-100%);
+      transition:transform .2s ease; box-shadow:0 0 40px rgba(0,0,0,.12);
+    }
+    body.nav-open aside{transform:none}
+    main{padding:0 22px 90px}
+    header.hero{padding-top:70px}
+    header.hero h1{font-size:1.95rem}
+    .navtoggle{
+      display:block; position:fixed; top:14px; left:14px; z-index:60;
+      background:var(--bg); border:1px solid var(--border); border-radius:7px;
+      padding:7px 13px; font-size:.85rem; font-weight:600; cursor:pointer; color:var(--text);
+    }
+  }
+  @media print{
+    aside,.navtoggle{display:none}
+    main{padding:0}
+    details.adr{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<button class="navtoggle" onclick="document.body.classList.toggle('nav-open')">&#9776; Índice</button>
+
+<div class="layout">
+
+<aside>
+  <div class="brand">
+    <div class="logo">FunEvents</div>
+    <div class="sub">Arquitectura y prototipo<br>Prueba técnica · Ingeniero .NET Core</div>
+  </div>
+  <nav>
+    <div class="group">Introducción</div>
+    <a href="#resumen">Qué contiene esta entrega</a>
+    <a href="#contexto">1. Contexto y requisitos</a>
+
+    <div class="group">Punto 1 · Arquitectura</div>
+    <a href="#estilo">2. Estilo arquitectónico</a>
+    <a href="#capas">3. Capas y módulos</a>
+    <a href="#api">4. API y contrato de errores</a>
+    <a href="#concurrencia">5. Concurrencia</a>
+    <a href="#idempotencia">6. Idempotencia</a>
+    <a href="#datos">7. Modelo de datos</a>
+    <a href="#ciclo">8. Ciclo de vida y caducidad</a>
+    <a href="#seguridad">9. Seguridad</a>
+    <a href="#escalabilidad">10. Escalabilidad</a>
+    <a href="#observabilidad">11. Observabilidad</a>
+    <a href="#evolucion">12. Plan de evolución</a>
+    <a href="#adr">13. Decisiones (ADR)</a>
+    <a href="#alcance">14. Alcance declarado</a>
+
+    <div class="group">Punto 2 · Prototipo</div>
+    <a href="#ejecucion">15. Cómo ejecutarlo</a>
+    <a href="#demo">16. Qué demuestra la demo</a>
+    <a href="#datos-demo">17. Datos sembrados</a>
+    <a href="#pruebas">18. Pruebas automáticas</a>
+
+    <div class="group">Cierre</div>
+    <a href="#trazabilidad">19. Enunciado → solución</a>
+  </nav>
+</aside>
+
+<main>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Prueba técnica · Ingeniero Programador .NET Core</div>
+  <h1>FunEvents: venta y reserva de entradas multicanal</h1>
+  <p class="lead">
+    Plataforma centralizada de venta de entradas para una empresa de eventos que vende por tres
+    canales: su portal propio, sus oficinas de atención repartidas por el mundo y los portales o
+    puntos de venta de colaboradores que integran el sistema dentro de su propia experiencia.
+  </p>
+  <div class="stackline">
+    <span class="chip">.NET 10</span>
+    <span class="chip">ASP.NET Core</span>
+    <span class="chip">PostgreSQL 16</span>
+    <span class="chip">EF Core · Npgsql</span>
+    <span class="chip">Clean Architecture</span>
+    <span class="chip">Serilog</span>
+    <span class="chip">FluentValidation</span>
+    <span class="chip">OpenAPI / Swagger</span>
+    <span class="chip">xUnit · Testcontainers</span>
+    <span class="chip">Docker Compose</span>
+  </div>
+</header>
+
+<!-- ==================================================================== -->
+<section id="resumen">
+<h2>Qué contiene esta entrega</h2>
+
+<p>
+  El enunciado plantea dos puntos. Este documento resuelve el primero y explica cómo ejecutar el
+  segundo; ambos viven en el mismo repositorio.
+</p>
+
+<div class="cards">
+  <div class="card">
+    <h4>Punto 1 — Arquitectura</h4>
+    <p>Secciones 1 a 14: contexto, estilo, capas, API, concurrencia, idempotencia, datos, seguridad,
+       escalabilidad y doce decisiones registradas.</p>
+  </div>
+  <div class="card">
+    <h4>Punto 2 — Prototipo</h4>
+    <p>API REST funcional y cliente de consola que reserva entradas a partir de un código de evento y
+       de usuario conocidos. Secciones 15 a 18.</p>
+  </div>
+</div>
+
+<h3>La idea en un párrafo</h3>
+<p>
+  El sistema hace una cosa y la hace de forma verificable: <strong>vender exactamente el aforo que
+  existe</strong>, sin importar cuánta gente lo intente a la vez, y permitir que un integrador externo
+  reintente una petición sin miedo a duplicar una compra. Todo lo demás —caché, réplicas, pasarela de
+  pago— se puede añadir encima sin tocar eso. Al revés no funciona.
+</p>
+
+<h3>Estado de cada capacidad</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Capacidad</th><th>Estado</th><th>Dónde</th></tr></thead>
+  <tbody>
+    <tr><td>Catálogo, detalle y disponibilidad de eventos</td><td><span class="badge done">Implementado</span></td><td><a href="#api">§4</a></td></tr>
+    <tr><td>Reserva con control de aforo a prueba de concurrencia</td><td><span class="badge done">Implementado</span></td><td><a href="#concurrencia">§5</a></td></tr>
+    <tr><td>Idempotencia de reintentos</td><td><span class="badge done">Implementado</span></td><td><a href="#idempotencia">§6</a></td></tr>
+    <tr><td>Caducidad automática que devuelve aforo</td><td><span class="badge done">Implementado</span></td><td><a href="#ciclo">§8</a></td></tr>
+    <tr><td>Autenticación por API Key del canal de colaboradores</td><td><span class="badge done">Implementado</span></td><td><a href="#seguridad">§9</a></td></tr>
+    <tr><td>Permisos por <em>scope</em> y aislamiento entre colaboradores</td><td><span class="badge done">Implementado</span></td><td><a href="#seguridad">§9</a></td></tr>
+    <tr><td>Limitación de peticiones por colaborador</td><td><span class="badge done">Implementado</span></td><td><a href="#seguridad">§9</a></td></tr>
+    <tr><td>Autenticación OAuth2/OIDC del portal y de las oficinas</td><td><span class="badge design">Diseñado</span></td><td><a href="#seguridad">§9</a></td></tr>
+    <tr><td>Pasarela de pago y confirmación de compra</td><td><span class="badge out">Fuera de alcance</span></td><td><a href="#alcance">§14</a></td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="contexto">
+<h2><span class="num">1</span>Contexto y requisitos</h2>
+
+<p>
+  FunEvents organiza conciertos, teatro y espectáculos, y necesita vender entradas por tres canales
+  con características muy distintas.
+</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Canal</th><th>Quién opera</th><th>Qué impone al diseño</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Portal propio</strong></td>
+      <td>Usuario final</td>
+      <td>Canal principal. Picos de tráfico concentrados en el instante en que se abre una venta.</td>
+    </tr>
+    <tr>
+      <td><strong>Oficinas de atención</strong></td>
+      <td>Empleado, en nombre de un cliente</td>
+      <td>Distribuidas por todo el mundo: latencia y husos horarios variables. La compra es del cliente, la auditoría del operador.</td>
+    </tr>
+    <tr>
+      <td><strong>Colaboradores</strong></td>
+      <td>Sistema externo (portal, app, POS)</td>
+      <td><strong>Quieren integrar FunEvents dentro de su propia experiencia.</strong> Es el requisito que más condiciona la arquitectura.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>El requisito que condiciona todo lo demás</h3>
+<p>
+  Que los colaboradores personalicen la experiencia significa que <strong>FunEvents no controla el
+  frontend de una parte de sus ventas</strong>. De ahí salen tres consecuencias que atraviesan cada
+  decisión posterior:
+</p>
+<ol>
+  <li>
+    <strong>La lógica de reserva no puede vivir en el canal.</strong> Si cada canal implementara sus
+    propias reglas de aforo tendríamos tres implementaciones divergentes de la regla más crítica del
+    negocio. La lógica vive en un servicio y los canales la consumen.
+  </li>
+  <li>
+    <strong>El contrato de integración es el producto.</strong> Quien integra no puede depurar nuestro
+    código: necesita errores tipados y estables, no mensajes de texto que podamos reescribir mañana.
+  </li>
+  <li>
+    <strong>Los reintentos son inevitables.</strong> Sobre una red que no controlamos, un
+    <code>POST</code> cuya respuesta se pierde será reintentado. Sin idempotencia, eso son entradas
+    duplicadas y una disputa de cobro.
+  </li>
+</ol>
+
+<h3>Requisitos funcionales</h3>
+<ul>
+  <li>Consultar el catálogo de eventos y su disponibilidad.</li>
+  <li>Reservar entradas a partir de un código de evento y de usuario ya conocidos.</li>
+  <li>Confirmar la reserva o dejar que caduque, devolviendo el aforo.</li>
+</ul>
+
+<h3>Requisitos no funcionales y cómo se abordan</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Requisito</th><th>Mecanismo</th></tr></thead>
+  <tbody>
+    <tr><td>No sobrevender jamás</td><td>Contador atómico con <code>UPDATE</code> condicional (<a href="#concurrencia">§5</a>)</td></tr>
+    <tr><td>Reintentos seguros sobre redes ajenas</td><td><code>Idempotency-Key</code> con huella del cuerpo (<a href="#idempotencia">§6</a>)</td></tr>
+    <tr><td>Que una reserva no bloquee aforo indefinidamente</td><td>Caducidad con proceso en segundo plano (<a href="#ciclo">§8</a>)</td></tr>
+    <tr><td>Aislar a cada colaborador de los demás</td><td>Identidad derivada de la credencial y filtrado por colaborador (<a href="#seguridad">§9</a>)</td></tr>
+    <tr><td>Que un integrador no degrade el servicio del resto</td><td>Limitación de peticiones particionada por colaborador (<a href="#seguridad">§9</a>)</td></tr>
+    <tr><td>Escalado horizontal ante picos de apertura de venta</td><td>API sin estado (<a href="#escalabilidad">§10</a>)</td></tr>
+    <tr><td>Poder reconstruir qué pasó en una compra concreta</td><td>Correlation ID en todas las líneas de log (<a href="#observabilidad">§11</a>)</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="estilo">
+<h2><span class="num">2</span>Estilo arquitectónico</h2>
+
+<p>
+  <strong>Monolito modular</strong> con Clean Architecture, sin estado, desplegable en N réplicas sobre
+  una única base de datos PostgreSQL.
+</p>
+
+<figure>
+<div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    EU["Usuario final&lt;br/&gt;&lt;i&gt;Portal web&lt;/i&gt;"]
+    OFF["Empleado de oficina&lt;br/&gt;&lt;i&gt;Aplicacion interna&lt;/i&gt;"]
+    PT["Sistema colaborador&lt;br/&gt;&lt;i&gt;Portal / app / POS&lt;/i&gt;"]
+    PLAT["&lt;b&gt;Plataforma FunEvents&lt;/b&gt;&lt;br/&gt;&lt;i&gt;Venta y reserva centralizada&lt;/i&gt;"]
+    PAY["Pasarela de pago&lt;br/&gt;&lt;i&gt;fuera de alcance&lt;/i&gt;"]
+    NOTIF["Notificaciones&lt;br/&gt;&lt;i&gt;fuera de alcance&lt;/i&gt;"]
+
+    EU --&gt; |"HTTPS · OAuth2/OIDC"| PLAT
+    OFF --&gt; |"HTTPS · OAuth2 + rol office"| PLAT
+    PT --&gt; |"HTTPS · X-Api-Key"| PLAT
+    PLAT -.-&gt; |"HTTPS"| PAY
+    PLAT -.-&gt; |"HTTPS"| NOTIF
+</pre>
+</div>
+<figcaption>C4 nivel 1 — contexto. Línea continua: dentro del alcance. Discontinua: fuera.</figcaption>
+</figure>
+
+<h3>Por qué no microservicios</h3>
+<p>
+  No es una decisión de comodidad: <strong>los microservicios empeorarían activamente el problema
+  central de este sistema</strong>.
+</p>
+<p>
+  La operación crítica es <em>comprobar que quedan N plazas y consumirlas sin que nadie se cuele en
+  medio</em>. En un monolito con una base de datos eso es una transacción ACID y una sentencia SQL.
+  Separado en un servicio de Inventario y otro de Reservas, la misma operación necesita una saga con
+  compensación o un lock distribuido: más piezas, más modos de fallo y una ventana de inconsistencia
+  donde antes no había ninguna.
+</p>
+<p>
+  Los microservicios resuelven problemas de <strong>organización</strong> —equipos que necesitan
+  desplegar por separado— y de <strong>escalado desigual</strong>. Aquí todavía no existe ninguno de
+  los dos. En <a href="#evolucion">§12</a> quedan escritas las señales concretas que justificarían el
+  cambio, para que la decisión se revise con un dato y no con una intuición.
+</p>
+
+<h3>Contenedores desplegables</h3>
+
+<figure>
+<div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    WEB["Portal web (SPA)&lt;br/&gt;&lt;i&gt;fuera del alcance&lt;/i&gt;"]
+    CLI["Cliente de consola&lt;br/&gt;&lt;i&gt;hace el papel de POS&lt;/i&gt;"]
+    POS["Portal / POS de colaborador"]
+
+    API["&lt;b&gt;API ASP.NET Core&lt;/b&gt;&lt;br/&gt;&lt;i&gt;.NET 10 · REST · puerto 8080&lt;/i&gt;&lt;br/&gt;&lt;i&gt;sin estado, N replicas&lt;/i&gt;"]
+    WRK["Procesos en segundo plano&lt;br/&gt;&lt;i&gt;caducidad de reservas&lt;/i&gt;&lt;br/&gt;&lt;i&gt;purga de Idempotency-Keys&lt;/i&gt;"]
+    DB[("&lt;b&gt;PostgreSQL 16&lt;/b&gt;&lt;br/&gt;&lt;i&gt;Events · Users · Reservations&lt;/i&gt;&lt;br/&gt;&lt;i&gt;Partners · IdempotencyKeys&lt;/i&gt;")]
+
+    WEB --&gt; API
+    CLI --&gt; |"HTTP / JSON"| API
+    POS --&gt; |"HTTP / JSON + X-Api-Key"| API
+    API --&gt; |"Npgsql"| DB
+    WRK --&gt; |"FOR UPDATE SKIP LOCKED"| DB
+</pre>
+</div>
+<figcaption>C4 nivel 2 — contenedores. Los procesos en segundo plano se ejecutan dentro de cada réplica de la API.</figcaption>
+</figure>
+
+<div class="note">
+  <span class="label">Detalle de diseño</span>
+  <p>
+    Los procesos en segundo plano viven dentro de la API en lugar de en un despliegue aparte. Con N
+    réplicas eso significa N workers compitiendo por el mismo lote de reservas caducadas, y devolver
+    el aforo dos veces sería tan grave como la sobreventa, pero al revés. Se resuelve tomando el lote
+    con <code>FOR UPDATE SKIP LOCKED</code> —ver <a href="#ciclo">§8</a>— sin necesidad de un lock
+    distribuido ni de un componente adicional.
+  </p>
+</div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="capas">
+<h2><span class="num">3</span>Capas y módulos</h2>
+
+<pre><code>FunEvents.Api             Controllers, filtros, seguridad, manejo de errores, Swagger
+        |
+        v
+FunEvents.Application     Casos de uso, DTOs, validadores, políticas
+        |
+        v
+FunEvents.Domain          Entidades, invariantes, interfaces      &lt;- no depende de nada
+        ^
+        |
+FunEvents.Infrastructure  EF Core, repositorios, idempotencia, workers</code></pre>
+
+<p>
+  <code>Infrastructure</code> apunta <em>hacia arriba</em> en el diagrama porque implementa interfaces
+  declaradas en <code>Domain</code>: es inversión de dependencias, no una excepción a la regla.
+  <code>Application</code> no sabe que existe EF Core.
+</p>
+
+<div class="note ok">
+  <span class="label">La regla de dependencia es verificable, no documental</span>
+  <p>
+    <code>FunEvents.Domain.csproj</code> <strong>no tiene ni una sola referencia</strong>: ni paquetes
+    NuGet ni otros proyectos. No es una convención que haya que recordar en las revisiones de código:
+    el día que alguien necesite añadirle una, la arquitectura se está rompiendo y el fichero de
+    proyecto lo delata en el <em>pull request</em>.
+  </p>
+</div>
+
+<p>
+  El mismo criterio se aplica al cliente de consola: <strong>no referencia ningún proyecto del
+  servidor</strong>. Habla solo por HTTP y JSON, exactamente como tendría que hacerlo el portal de un
+  colaborador escrito en Java o TypeScript. Si compartiera los DTOs, la demostración no probaría que
+  el contrato REST se sostiene por sí solo.
+</p>
+
+<h3>Módulos</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Módulo</th><th>Responsabilidad</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Events</td><td>Catálogo, paginación, búsqueda</td><td><span class="badge done">Implementado</span></td></tr>
+    <tr><td>Reservations</td><td>Creación, consulta, concurrencia, idempotencia</td><td><span class="badge done">Implementado</span></td></tr>
+    <tr><td>Availability</td><td>Disponibilidad en tiempo real</td><td><span class="badge done">Implementado</span></td></tr>
+    <tr><td>Users</td><td>Consulta de compradores</td><td><span class="badge done">Implementado</span> (solo lectura)</td></tr>
+    <tr><td>Partners</td><td>Colaboradores, API keys, permisos, cuota</td><td><span class="badge done">Implementado</span></td></tr>
+    <tr><td>Auth</td><td>Identidad del portal y de las oficinas</td><td><span class="badge design">Diseñado</span> — <a href="#seguridad">§9</a></td></tr>
+  </tbody>
+</table>
+</div>
+
+<figure>
+<div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    CTRL["&lt;b&gt;Api&lt;/b&gt;&lt;br/&gt;Controllers · ValidationFilter · CorrelationId&lt;br/&gt;ApiKeyAuthenticationHandler · RateLimiter&lt;br/&gt;DomainErrorCatalog"]
+    APP["&lt;b&gt;Application&lt;/b&gt;&lt;br/&gt;ReservationService · EventService&lt;br/&gt;AvailabilityService · UserService&lt;br/&gt;Validadores · Politicas"]
+    DOM["&lt;b&gt;Domain&lt;/b&gt;&lt;br/&gt;Event · Reservation · User · Partner&lt;br/&gt;Invariantes · Interfaces de repositorio&lt;br/&gt;&lt;i&gt;cero dependencias&lt;/i&gt;"]
+    INFRA["&lt;b&gt;Infrastructure&lt;/b&gt;&lt;br/&gt;AppDbContext · Repositorios · UnitOfWork&lt;br/&gt;IdempotencyStore · Workers"]
+    DB[("PostgreSQL 16")]
+
+    CTRL --&gt; APP
+    APP --&gt; DOM
+    INFRA --&gt; DOM
+    INFRA --&gt; DB
+</pre>
+</div>
+<figcaption>Todas las flechas apuntan hacia el dominio. Nada apunta hacia fuera desde él.</figcaption>
+</figure>
+</section>
+
+<!-- ==================================================================== -->
+<section id="api">
+<h2><span class="num">4</span>API y contrato de errores</h2>
+
+<h3>Por qué REST + JSON + OpenAPI</h3>
+<p>
+  Un colaborador puede estar en cualquier tecnología: un POS heredado en C++, un portal en PHP, una
+  app móvil. REST sobre HTTP/JSON es el único contrato que todos consumen sin herramientas especiales,
+  y OpenAPI les entrega un cliente generado.
+</p>
+<p>
+  Se descartó <strong>gRPC</strong> —excelente entre servicios, hostil para un POS heredado— y
+  <strong>GraphQL</strong>, que resuelve el problema de la sobre-consulta, que aquí no tenemos, y
+  complica el cacheo HTTP, que aquí sí queremos.
+</p>
+
+<h3>Endpoints</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Método</th><th>Ruta</th><th>Descripción</th><th>Credencial</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET</code></td><td><code>/api/v1/events</code></td><td>Catálogo paginado (<code>page</code>, <code>pageSize</code>, <code>search</code>)</td><td>Pública</td></tr>
+    <tr><td><code>GET</code></td><td><code>/api/v1/events/{id}</code></td><td>Detalle de un evento</td><td>Pública</td></tr>
+    <tr><td><code>GET</code></td><td><code>/api/v1/events/{id}/availability</code></td><td>Disponibilidad actual (cacheada 5 s)</td><td>Pública</td></tr>
+    <tr><td><code>GET</code></td><td><code>/api/v1/users</code></td><td>Usuarios conocidos</td><td>Pública</td></tr>
+    <tr><td><code>GET</code></td><td><code>/api/v1/users/{id}</code></td><td>Detalle de usuario</td><td>Pública</td></tr>
+    <tr><td><code>POST</code></td><td><code>/api/v1/reservations</code></td><td><strong>Crear reserva</strong> — exige <code>Idempotency-Key</code></td><td><code>X-Api-Key</code> en canal Partner</td></tr>
+    <tr><td><code>GET</code></td><td><code>/api/v1/reservations/{id}</code></td><td>Consultar reserva</td><td>Filtrada por colaborador</td></tr>
+    <tr><td><code>GET</code></td><td><code>/health</code></td><td>Liveness — no consulta la base de datos</td><td>Pública, exenta de cuota</td></tr>
+    <tr><td><code>GET</code></td><td><code>/health/ready</code></td><td>Readiness — sí comprueba la base de datos</td><td>Pública, exenta de cuota</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <span class="label">Por qué dos health checks distintos</span>
+  <p>
+    <code>/health</code> no toca la base de datos <em>a propósito</em>. Si lo hiciera, una caída de
+    PostgreSQL provocaría que el orquestador reiniciara en bucle unos contenedores perfectamente
+    sanos, convirtiendo una incidencia de base de datos en una incidencia total. La comprobación de
+    dependencias es la que mira el balanceador para decidir si mandar tráfico, y esa es
+    <code>/health/ready</code>.
+  </p>
+</div>
+
+<h3>Contrato de errores</h3>
+<p>
+  Todos los errores son <code>application/problem+json</code> (RFC 9457) e incluyen un campo
+  <code>errorCode</code> estable:
+</p>
+
+<pre><code>{
+  "type": "https://api.funevents.com/errors/insufficient-capacity",
+  "title": "Insufficient capacity",
+  "status": 409,
+  "detail": "Not enough capacity left for event 'Comedy Night'.",
+  "instance": "/api/v1/reservations",
+  "errorCode": "INSUFFICIENT_CAPACITY",
+  "traceId": "00-a1b2...-01",
+  "correlationId": "9f2c1a..."
+}</code></pre>
+
+<p>
+  <strong><code>errorCode</code> es lo que un integrador debe programar.</strong> <code>title</code> y
+  <code>detail</code> son para humanos y pueden cambiar de redacción sin previo aviso;
+  <code>errorCode</code> no cambia nunca. Es la diferencia entre un colaborador que puede reaccionar
+  programáticamente a «no hay aforo» y uno que tiene que parsear texto en inglés.
+</p>
+<p>
+  La traducción de código de dominio a status HTTP vive en un único catálogo
+  (<code>DomainErrorCatalog</code>), no repartida en bloques <code>catch</code> por los controladores.
+  Los errores que nacen fuera de un controlador —una credencial rechazada, una cuota agotada— se
+  construyen con el mismo generador (<code>ApiProblem</code>), de modo que un integrador nunca se
+  encuentra con dos formatos de error distintos según dónde se cortara su petición.
+</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Status</th><th>Cuándo</th><th>Ejemplos de <code>errorCode</code></th></tr></thead>
+  <tbody>
+    <tr><td><code>400</code></td><td>La petición está mal formada</td><td>Falta <code>userId</code>, falta <code>Idempotency-Key</code>, <code>partnerId</code> en el cuerpo</td></tr>
+    <tr><td><code>401</code></td><td>Credencial ausente cuando hace falta, o inválida</td><td><code>API_KEY_REQUIRED</code>, <code>INVALID_API_KEY</code></td></tr>
+    <tr><td><code>403</code></td><td>Credencial válida sin el permiso necesario</td><td><code>INSUFFICIENT_SCOPE</code></td></tr>
+    <tr><td><code>404</code></td><td>El recurso no existe <em>o no es visible para quien pregunta</em></td><td><code>EVENT_NOT_FOUND</code>, <code>USER_NOT_FOUND</code></td></tr>
+    <tr><td><code>409</code></td><td>Conflicto con el estado actual; reintentar puede funcionar</td><td><code>INSUFFICIENT_CAPACITY</code>, <code>REQUEST_IN_PROGRESS</code></td></tr>
+    <tr><td><code>422</code></td><td>Petición válida que viola una regla de negocio</td><td><code>EVENT_NOT_PUBLISHED</code>, <code>USER_INACTIVE</code>, <code>PER_USER_LIMIT_EXCEEDED</code>, <code>IDEMPOTENCY_KEY_REUSED</code></td></tr>
+    <tr><td><code>429</code></td><td>Cuota de peticiones agotada</td><td><code>RATE_LIMIT_EXCEEDED</code> + cabecera <code>Retry-After</code></td></tr>
+    <tr><td><code>500</code></td><td>Fallo no previsto</td><td>Nunca expone el mensaje interno; devuelve <code>traceId</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Versionado</h3>
+<p>
+  La versión va en la ruta (<code>/api/v1/</code>). Es la opción menos elegante y la más práctica: un
+  colaborador puede probar un endpoint pegando la URL en un navegador, y los logs y las métricas
+  quedan segmentados por versión sin configuración adicional. El versionado por cabecera es más puro
+  pero invisible en cualquier herramienta que no sea un cliente HTTP completo.
+</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="concurrencia">
+<h2><span class="num">5</span>Concurrencia — el núcleo del problema</h2>
+
+<p>
+  Se abre la venta de un concierto con 100 plazas. En el primer segundo llegan 3.000 peticiones. Deben
+  entrar exactamente 100.
+</p>
+
+<h3>La solución ingenua y por qué falla</h3>
+<pre><code>var evento = await db.Events.FindAsync(id);       <span class="c">// (1) leer</span>
+if (evento.AvailableCapacity() &gt;= cantidad)       <span class="c">// (2) comprobar</span>
+{
+    evento.ReservedCount += cantidad;             <span class="c">// (3) modificar</span>
+    await db.SaveChangesAsync();                  <span class="c">// (4) escribir</span>
+}</code></pre>
+
+<div class="note danger">
+  <span class="label">El bug que solo aparece cuando el sistema tiene éxito</span>
+  <p>
+    Entre (1) y (4) hay una ventana. Cien peticiones pueden leer «quedan 100» antes de que ninguna
+    escriba, y las cien pasan la comprobación. <strong>Sobreventa garantizada bajo carga</strong> —y
+    además invisible en pruebas manuales, porque con un clic cada vez funciona perfectamente.
+  </p>
+</div>
+
+<h3>La solución adoptada: UPDATE condicional atómico</h3>
+<pre><code><span class="k">UPDATE</span> "Events"
+<span class="k">SET</span>    "ReservedCount" = "ReservedCount" + @quantity,
+       "UpdatedAt"     = @now
+<span class="k">WHERE</span>  "Id"     = @eventId
+  <span class="k">AND</span>  "State"  = <span class="s">'Published'</span>
+  <span class="k">AND</span>  "Capacity" - "ReservedCount" &gt;= @quantity;</code></pre>
+
+<p>
+  La condición y la escritura son <strong>la misma sentencia</strong>. PostgreSQL toma el lock de la
+  fila, evalúa la condición sobre el valor real en ese instante y escribe. No existe ventana porque no
+  hay dos pasos.
+</p>
+<ul>
+  <li>Devuelve <strong>1 fila</strong> → había aforo y ya está consumido.</li>
+  <li>Devuelve <strong>0 filas</strong> → no cabía. <code>409 Conflict</code>.</li>
+</ul>
+<p>
+  No existe un tercer resultado, y es imposible que devuelva 1 fila sin que hubiera aforo. La
+  sobreventa no se detecta ni se corrige: <strong>no puede ocurrir</strong>. En el código es
+  <code>IEventRepository.TryReserveCapacityAsync</code>, y devuelve <code>bool</code> precisamente para
+  que el caso de uso no pueda ignorar el resultado.
+</p>
+
+<figure>
+<div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant A as Peticion A (quiere 2)
+    participant B as Peticion B (quiere 2)
+    participant DB as PostgreSQL
+
+    Note over A,DB: Estado inicial: Capacity=5, ReservedCount=3 (2 libres)
+    A-&gt;&gt;DB: BEGIN
+    B-&gt;&gt;DB: BEGIN
+    A-&gt;&gt;DB: UPDATE ... WHERE quedan al menos 2 plazas
+    Note over DB: A toma el lock de la fila. Quedaban 2 y pide 2, se aplica.
+    DB--&gt;&gt;A: 1 fila afectada
+    B-&gt;&gt;DB: UPDATE ... WHERE quedan al menos 2 plazas
+    Note over DB: B QUEDA EN ESPERA tras el lock de A. No lee un valor obsoleto.
+    A-&gt;&gt;DB: INSERT INTO Reservations
+    A-&gt;&gt;DB: COMMIT
+    Note over DB: B reevalua la condicion sobre el valor ya actualizado: quedan 0
+    DB--&gt;&gt;B: 0 filas afectadas
+    B-&gt;&gt;DB: ROLLBACK
+    B--&gt;&gt;B: 409 INSUFFICIENT_CAPACITY
+</pre>
+</div>
+<figcaption>Dos compradores, dos plazas libres, cuatro entradas pedidas. Solo uno gana.</figcaption>
+</figure>
+
+<h3>Comparación de estrategias</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Estrategia</th><th>15 peticiones a la vez sobre 10 plazas</th><th>Veredicto</th></tr></thead>
+  <tbody>
+    <tr><td>Leer, comprobar, escribir</td><td>Sobreventa</td><td>Incorrecta</td></tr>
+    <tr><td>Concurrencia optimista (<code>RowVersion</code>)</td><td>1 éxito + 14 excepciones a reintentar</td><td>Correcta, pero pésima justo bajo carga máxima</td></tr>
+    <tr><td><code>SELECT ... FOR UPDATE</code></td><td>10 éxitos, 5 rechazos</td><td>Correcta; más viajes y lock más largo</td></tr>
+    <tr><td><strong>UPDATE condicional</strong></td><td><strong>10 éxitos, 5 rechazos con 409</strong></td><td><strong>Correcta y con un solo viaje</strong></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  La concurrencia optimista merece una nota aparte porque es lo primero que se propone en una
+  revisión: es <em>exactamente</em> la estrategia equivocada para este caso. Sirve cuando los
+  conflictos son raros; aquí son el caso normal, y produce N−1 excepciones en el momento de máxima
+  demanda.
+</p>
+
+<h3>Ámbito transaccional</h3>
+<p>
+  El <code>UPDATE</code> del contador, el <code>INSERT</code> de la reserva y el registro de la
+  respuesta idempotente ocurren <strong>en una sola transacción</strong>. Si algo falla después de
+  consumir el aforo, el rollback lo devuelve.
+</p>
+<p>Esto se abstrae en <code>IUnitOfWork</code> por dos razones concretas, no por costumbre:</p>
+<ol>
+  <li>Sin él, <code>Application</code> tendría que llamar a
+      <code>DbContext.Database.BeginTransactionAsync()</code> y conocer EF Core, rompiendo la regla de
+      dependencia.</li>
+  <li>La implementación pasa por <code>Database.CreateExecutionStrategy()</code>, que es el
+      <strong>único</strong> modo correcto de combinar transacciones explícitas con la política de
+      reintentos del proveedor. Llamar directamente a <code>BeginTransactionAsync</code> con
+      <code>EnableRetryOnFailure</code> activo lanza <code>InvalidOperationException</code> en tiempo
+      de ejecución.</li>
+</ol>
+
+<h3>Límite de entradas por usuario</h3>
+<p>
+  Se cuentan las entradas activas (<code>Reserved</code> + <code>Confirmed</code>) del usuario para ese
+  evento y se rechaza si el total superase el límite configurado.
+</p>
+<div class="note warn">
+  <span class="label">Limitación conocida y asumida</span>
+  <p>
+    Contar y después insertar deja una ventana teórica en la que dos peticiones simultáneas del
+    <em>mismo</em> usuario podrían superar el tope entre ambas. <strong>No es sobreventa</strong> —el
+    aforo global sigue protegido por el <code>UPDATE</code> atómico—, solo un usuario que se pasa del
+    límite. Cerrarlo del todo requiere un lock por <code>(usuario, evento)</code>, por ejemplo
+    <code>pg_advisory_xact_lock(hashtext(...))</code>. Se documenta como Fase 2 en vez de fingir que el
+    problema no existe.
+  </p>
+</div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="idempotencia">
+<h2><span class="num">6</span>Idempotencia</h2>
+
+<p>
+  Un colaborador envía <code>POST /reservations</code>. La reserva se crea. <strong>La respuesta se
+  pierde en la red.</strong> El colaborador reintenta. Sin idempotencia: dos reservas, doble cobro,
+  disputa con el cliente final.
+</p>
+
+<h3>El protocolo, en tres fases</h3>
+<p>Cada fase resuelve un problema distinto y no son intercambiables.</p>
+
+<ol class="steps">
+  <li>
+    <h3>Reproducción</h3>
+    <p>
+      Si la key ya terminó, se devuelve la respuesta guardada con <code>previouslyCreated: true</code>
+      y <code>200 OK</code> —no 201: el cliente debe poder distinguir «creé algo» de «esto ya
+      existía»—. Se relee el estado <em>actual</em> de la reserva, porque pudo caducar entre la
+      petición original y el reintento.
+    </p>
+  </li>
+  <li>
+    <h3>Exclusión mutua</h3>
+    <p>
+      Se intenta insertar la key. <strong>La clave primaria de la tabla <em>es</em> el mecanismo de
+      bloqueo</strong>: PostgreSQL ya garantiza que solo una transacción puede insertar una clave
+      primaria dada. Convertir esa garantía en el lock elimina Redis y un lock distribuido enteros. El
+      resto de peticiones espera brevemente al resultado en vez de duplicar el trabajo.
+    </p>
+    <div class="note">
+      <span class="label">Por qué esta fase va fuera de la transacción</span>
+      <p>
+        En PostgreSQL, una violación de unicidad aborta la transacción entera:
+        <code>current transaction is aborted, commands ignored until end of transaction block</code>.
+        Usarla como bloqueo <em>dentro</em> de la transacción del caso de uso invalidaría todo lo demás
+        que hubiera abierto.
+      </p>
+    </div>
+  </li>
+  <li>
+    <h3>Trabajo real</h3>
+    <p>
+      Validaciones, consumo atómico de aforo, alta de la reserva y registro de la respuesta hacen
+      commit juntos o no hace ninguno.
+    </p>
+  </li>
+</ol>
+
+<figure>
+<div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant A as Peticion A (Key=K)
+    participant B as Peticion B (Key=K)
+    participant DB as PostgreSQL
+
+    Note over A,DB: FASE 1 - Reproduccion
+    A-&gt;&gt;DB: SELECT IdempotencyKeys WHERE Key='K'
+    DB--&gt;&gt;A: no existe
+    B-&gt;&gt;DB: SELECT IdempotencyKeys WHERE Key='K'
+    DB--&gt;&gt;B: no existe
+
+    Note over A,DB: FASE 2 - Exclusion mutua (fuera de la transaccion)
+    A-&gt;&gt;DB: INSERT (Key='K', Fingerprint=H, CompletedAt=NULL)
+    DB--&gt;&gt;A: OK, A gana la key
+    B-&gt;&gt;DB: INSERT (Key='K', ...)
+    DB--&gt;&gt;B: ERROR, violacion de clave primaria
+    Note over B: B no duplica el trabajo: espera el resultado de A.
+
+    Note over A,DB: FASE 3 - Trabajo real (una transaccion)
+    A-&gt;&gt;DB: BEGIN
+    A-&gt;&gt;DB: UPDATE Events (contador atomico)
+    A-&gt;&gt;DB: INSERT Reservations
+    A-&gt;&gt;DB: UPDATE IdempotencyKeys SET CompletedAt=now()
+    A-&gt;&gt;DB: COMMIT
+    A--&gt;&gt;A: 201 Created
+
+    loop Sondeo acotado (hasta 2 s)
+        B-&gt;&gt;DB: SELECT IdempotencyKeys WHERE Key='K'
+    end
+    B-&gt;&gt;DB: SELECT Reservations WHERE Id=R
+    B--&gt;&gt;B: 200 OK, previouslyCreated=true
+</pre>
+</div>
+<figcaption>Dos peticiones idénticas y simultáneas producen una sola reserva.</figcaption>
+</figure>
+
+<h3>Liberación de la key ante fallo</h3>
+<figure>
+<div class="diagram">
+<pre class="mermaid">
+flowchart TD
+    A["INSERT key: OK"] --&gt; B["BEGIN transaccion"]
+    B --&gt; C{"Trabajo real"}
+    C --&gt; |Exito| D["UPDATE key: CompletedAt = now()"]
+    D --&gt; E["COMMIT, 201 Created"]
+    C --&gt; |Fallo| F["ROLLBACK"]
+    F --&gt; G["DELETE key WHERE CompletedAt IS NULL"]
+    G --&gt; H["Error tipado al cliente"]
+    G -.-&gt; I["El cliente PUEDE reintentar con la misma key"]
+</pre>
+</div>
+<figcaption>Sin el paso <code>DELETE</code>, la key quedaría retenida y el cliente recibiría 409 durante 24 horas.</figcaption>
+</figure>
+
+<h3>Reutilización con cuerpo distinto</h3>
+<p>
+  Se guarda un SHA-256 del contenido de la petición. Si llega la misma key con un cuerpo diferente se
+  rechaza con <code>422 IDEMPOTENCY_KEY_REUSED</code>.
+</p>
+<div class="note warn">
+  <span class="label">Por qué esta comprobación paga su coste</span>
+  <p>
+    Sin ella, un cliente que reutilice una key por error recibiría <code>200 OK</code> con la reserva
+    de <strong>otra</strong> compra y creería que su petición se procesó. Es un fallo silencioso que
+    aparece semanas después como un descuadre contable imposible de rastrear.
+  </p>
+</div>
+
+<h3>Respuestas posibles</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Situación</th><th>Status</th><th><code>errorCode</code></th></tr></thead>
+  <tbody>
+    <tr><td>Key nueva, todo correcto</td><td><code>201 Created</code></td><td>—</td></tr>
+    <tr><td>Key ya completada, mismo cuerpo</td><td><code>200 OK</code></td><td>— (<code>previouslyCreated: true</code>)</td></tr>
+    <tr><td>Key en curso en otra petición que no termina a tiempo</td><td><code>409</code></td><td><code>REQUEST_IN_PROGRESS</code></td></tr>
+    <tr><td>Key conocida, cuerpo distinto</td><td><code>422</code></td><td><code>IDEMPOTENCY_KEY_REUSED</code></td></tr>
+    <tr><td>Falta la cabecera</td><td><code>400</code></td><td>—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="small muted">
+  Las keys se purgan a las 24 horas mediante <code>IdempotencyCleanupWorker</code>. Sin purga, la tabla
+  crece de forma indefinida: una fila por cada <code>POST</code>, jamás borrada.
+</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="datos">
+<h2><span class="num">7</span>Modelo de datos</h2>
+
+<figure>
+<div class="diagram">
+<pre class="mermaid">
+erDiagram
+    Events {
+        uuid Id PK
+        text Name
+        text Venue
+        timestamptz StartDate
+        int Capacity
+        int ReservedCount "contador atomico"
+        text State "Draft Published Cancelled Completed"
+        uuid PartnerId FK "nullable"
+    }
+    Users {
+        uuid Id PK
+        text FullName
+        text Email UK
+        bool IsActive
+    }
+    Reservations {
+        uuid Id PK
+        uuid EventId FK
+        uuid UserId FK "obligatorio"
+        uuid PartnerId FK "solo canal Partner"
+        int TicketQuantity
+        text State "Reserved Confirmed Expired Cancelled"
+        timestamptz ExpiresAt
+        text Channel "Online Office Partner"
+    }
+    Partners {
+        uuid Id PK
+        text Name
+        text ApiKeyHash UK "SHA-256"
+        bool IsActive
+        text_array Scopes
+        int RateLimit "peticiones por minuto"
+    }
+    IdempotencyKeys {
+        text Key PK "exclusion mutua"
+        text RequestFingerprint "SHA-256 del cuerpo"
+        uuid ReservationId FK "nullable"
+        int StatusCode "nullable"
+        jsonb ResponseBody "nullable"
+        timestamptz CompletedAt "null = en curso"
+    }
+
+    Events ||--o{ Reservations : "tiene"
+    Users ||--o{ Reservations : "realiza"
+    Events }o--o| Partners : "puede pertenecer a"
+    Reservations }o--o| Partners : "puede originarse en"
+</pre>
+</div>
+<figcaption>Cinco tablas. El contador de aforo vive en <code>Events</code>, no derivado de una suma sobre <code>Reservations</code>.</figcaption>
+</figure>
+
+<h3>Decisiones de mapeo</h3>
+
+<h4>Los enums se persisten como texto, no como enteros</h4>
+<p>
+  La tabla se puede leer sin consultar el código, y reordenar el enum no corrompe los datos existentes.
+  El coste son unos bytes por fila; el beneficio es que un <code>SELECT</code> en producción a las tres
+  de la mañana es legible.
+</p>
+
+<h4>Índices parciales para las dos consultas calientes</h4>
+<pre><code><span class="k">CREATE INDEX</span> "IX_Reservations_User_Event_Active" <span class="k">ON</span> "Reservations" ("UserId", "EventId")
+  <span class="k">WHERE</span> "State" <span class="k">IN</span> (<span class="s">'Reserved'</span>, <span class="s">'Confirmed'</span>);
+
+<span class="k">CREATE INDEX</span> "IX_Reservations_Pending_Expiration" <span class="k">ON</span> "Reservations" ("State", "ExpiresAt")
+  <span class="k">WHERE</span> "State" = <span class="s">'Reserved'</span>;</code></pre>
+<p>
+  Solo indexan las filas vivas. En un sistema donde el histórico crece sin parar pero las reservas
+  activas son siempre pocas, el índice se mantiene pequeño indefinidamente.
+</p>
+<div class="note warn">
+  <span class="label">Detalle que costó encontrar</span>
+  <p>
+    El filtro debe usar exactamente los valores que escribe el conversor. Con
+    <code>HasConversion&lt;string&gt;()</code> eso es <code>'Reserved'</code> en PascalCase, no
+    <code>'RESERVED'</code>. Una versión anterior filtraba en mayúsculas: ambos índices existían en el
+    esquema y <strong>el planificador no los usaba jamás</strong>, porque ninguna fila cumplía el
+    filtro. Un índice que nunca se usa es peor que no tenerlo: cuesta escribirlo en cada
+    <code>INSERT</code> y da una tranquilidad injustificada.
+  </p>
+</div>
+
+<h4>Restricciones CHECK en la base de datos</h4>
+<p>
+  <code>ReservedCount BETWEEN 0 AND Capacity</code> y <code>TicketQuantity &gt; 0</code>. Es la última
+  línea de defensa: si un bug futuro se salta el dominio, el motor rechaza la escritura.
+</p>
+
+<h4><code>Scopes</code> como <code>text[]</code> nativo</h4>
+<p>
+  En lugar de una cadena separada por comas. Evita declarar un <code>ValueConverter</code> con su
+  <code>ValueComparer</code> —sin el comparador, EF Core no detecta cambios en la colección— y permite
+  consultar con operadores de array si algún día hace falta.
+</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="ciclo">
+<h2><span class="num">8</span>Ciclo de vida y caducidad</h2>
+
+<pre><code>Reserved ──confirmar──&gt; Confirmed ──cancelar──&gt; Cancelled
+   |
+   ├──caducar──&gt; Expired    (terminal)
+   └──cancelar─&gt; Cancelled  (terminal)</code></pre>
+
+<p>Una reserva retiene aforo mientras esté en <code>Reserved</code> o <code>Confirmed</code>.</p>
+<p>
+  <code>ReservationExpirationWorker</code> se ejecuta periódicamente: marca como <code>Expired</code>
+  las reservas vencidas y devuelve su cupo al evento, <strong>todo dentro de la misma
+  transacción</strong>. Si el proceso muere a mitad, el rollback deja las reservas como
+  <code>Reserved</code> y la siguiente pasada las vuelve a tomar.
+</p>
+
+<h3>Seguridad en despliegues con varias réplicas</h3>
+<pre><code><span class="k">SELECT</span> * <span class="k">FROM</span> "Reservations"
+<span class="k">WHERE</span> "State" = <span class="s">'Reserved'</span> <span class="k">AND</span> "ExpiresAt" &lt; NOW()
+<span class="k">ORDER BY</span> "ExpiresAt" <span class="k">LIMIT</span> @batch
+<span class="k">FOR UPDATE SKIP LOCKED</span>;</code></pre>
+<p>
+  <code>FOR UPDATE SKIP LOCKED</code> hace que cada instancia se lleve un lote
+  <strong>disjunto</strong>: las filas ya bloqueadas por otra réplica se saltan en vez de esperar. Sin
+  lock distribuido, sin Redis, sin coordinación externa. Es la razón de bajar a SQL en crudo en ese
+  punto concreto: no tiene equivalente en LINQ.
+</p>
+
+<h3>Por qué sondeo y no un <em>message broker</em></h3>
+<p>
+  Un broker con mensajes diferidos sería más elegante y reaccionaría al segundo. Pero añade un
+  componente de infraestructura entero —desplegar, monitorizar, gestionar la cola de mensajes muertos—
+  para una funcionalidad cuya latencia aceptable se mide en decenas de segundos. Queda registrado en
+  <a href="#evolucion">§12</a> como Fase 3, con la señal concreta que lo justificaría.
+</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="seguridad">
+<h2><span class="num">9</span>Seguridad</h2>
+
+<p>
+  El canal que impone los requisitos de seguridad es el de colaboradores: son sistemas externos, con
+  credenciales de larga vida, que operan sobre datos de terceros y cuyo volumen de tráfico no
+  controlamos. <strong>Ese canal está implementado y cubierto por pruebas de integración.</strong>
+</p>
+
+<h3>Autenticación por canal</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Canal</th><th>Mecanismo</th><th>Estado</th><th>Por qué ese y no otro</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Colaboradores</td>
+      <td><code>X-Api-Key</code> con hash SHA-256 en base de datos</td>
+      <td><span class="badge done">Implementado</span></td>
+      <td>Un POS heredado sabe enviar una cabecera; puede que no sepa completar un flujo OAuth2. Y la revocación es inmediata.</td>
+    </tr>
+    <tr>
+      <td>Portal web</td>
+      <td>OAuth2/OIDC, Authorization Code + PKCE</td>
+      <td><span class="badge design">Diseñado</span></td>
+      <td>Estándar para clientes públicos. PKCE porque una SPA no puede guardar un secreto.</td>
+    </tr>
+    <tr>
+      <td>Oficinas</td>
+      <td>OAuth2/OIDC + rol <code>office</code></td>
+      <td><span class="badge design">Diseñado</span></td>
+      <td>Mismo proveedor de identidad, distinto rol. El operador actúa <em>en nombre de</em> un usuario: la reserva se atribuye al comprador, la auditoría al operador.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <span class="label">Por qué OAuth2 queda como diseño y la API Key no</span>
+  <p>
+    Implementar OAuth2/OIDC de verdad exige un proveedor de identidad externo —Keycloak, Entra ID,
+    Auth0— que no forma parte de este prototipo y cuya configuración no se puede verificar en la
+    entrega. Simularlo con un emisor de JWT propio demostraría que sé firmar un token, no que el
+    sistema esté protegido. La API Key, en cambio, es un mecanismo completo de principio a fin:
+    emisión, almacenamiento, validación, permisos, revocación y aislamiento; y todo eso se puede
+    ejercitar contra el sistema real.
+  </p>
+</div>
+
+<h3>Cómo funciona la validación de la API Key</h3>
+
+<figure>
+<div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    REQ["Peticion entrante"] --&gt; H{"Trae X-Api-Key?"}
+    H --&gt; |No| ANON["Identidad anonima&lt;br/&gt;&lt;i&gt;legitima: el catalogo es publico&lt;/i&gt;"]
+    H --&gt; |Si| HASH["SHA-256 de la clave"]
+    HASH --&gt; CACHE{"En cache (30 s)?"}
+    CACHE --&gt; |Si| RESOLVED["Colaborador resuelto"]
+    CACHE --&gt; |No| DB[("SELECT Partners&lt;br/&gt;WHERE ApiKeyHash = @h AND IsActive")]
+    DB --&gt; RESOLVED
+    DB --&gt; NONE["Sin coincidencia"]
+    NONE --&gt; R401["401 INVALID_API_KEY&lt;br/&gt;&lt;i&gt;+ cache negativa de 5 s&lt;/i&gt;"]
+    ANON --&gt; RL["Limitador: particion por IP"]
+    RESOLVED --&gt; RL2["Limitador: particion por colaborador&lt;br/&gt;cupo = Partner.RateLimit"]
+    RL --&gt; EP["Endpoint"]
+    RL2 --&gt; EP
+</pre>
+</div>
+<figcaption>Credencial ausente es anónimo; credencial presente tiene que ser válida.</figcaption>
+</figure>
+
+<h4>Por qué API Key y no solo JWT</h4>
+<p>
+  Un JWT emitido es válido hasta que caduca: revocarlo exige una lista de revocación consultada en cada
+  petición, que es justo la consulta que el JWT pretendía evitar. Un colaborador comercial puede dejar
+  de serlo de un día para otro —impago, fin de contrato, filtración de la clave— y en ese momento la
+  propiedad que importa es poder cortarle el acceso ya. <strong>Con API Key, revocar es un
+  <code>UPDATE</code></strong> sobre <code>IsActive</code>, y la caché de 30 segundos acota el retardo
+  a algo que un operador percibe como inmediato.
+</p>
+
+<h4>Por qué SHA-256 y no BCrypt o Argon2</h4>
+<p>
+  Para una contraseña de persona se usa un hash lento con sal: el espacio de claves es pequeño y
+  predecible, así que hay que encarecer cada intento. Una API Key es un secreto de 256 bits generado
+  por el servidor: no hay diccionario que atacar, y un hash lento solo añadiría latencia a cada
+  petición del colaborador. La propiedad que necesitamos es otra: que un volcado de la tabla
+  <code>Partners</code> no permita usar ninguna clave. La clave en claro no se persiste ni se escribe
+  en ningún log —cuando un rechazo se registra, se hace con el prefijo del <em>hash</em>—.
+</p>
+
+<h3>401 y 403 son cosas distintas</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Situación</th><th>Respuesta</th><th>Qué le dice al integrador</th></tr></thead>
+  <tbody>
+    <tr><td>Canal Partner sin cabecera</td><td><code>401 API_KEY_REQUIRED</code></td><td>Falta la credencial.</td></tr>
+    <tr><td>Clave inexistente o de un colaborador dado de baja</td><td><code>401 INVALID_API_KEY</code></td><td>Revisa tu clave.</td></tr>
+    <tr><td>Clave válida sin el permiso <code>reservations:create</code></td><td><code>403 INSUFFICIENT_SCOPE</code></td><td>Tu clave está bien; lo que hay que ampliar es tu contrato.</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="small muted">
+  Devolver 401 en el tercer caso haría que el integrador revisara su clave, que está perfectamente
+  bien, en lugar de hablar con su comercial. La distinción no es purismo HTTP: ahorra un ticket de
+  soporte por cada integración.
+</p>
+
+<h3>La identidad nunca viaja con los datos</h3>
+<p>
+  <code>PartnerId</code> <strong>no se acepta en el cuerpo de la petición</strong>: lo fija el servidor
+  a partir de la clave presentada, y un <code>partnerId</code> enviado por el cliente se rechaza con
+  <code>400</code>. Aceptarlo del cliente permitiría a un colaborador atribuir sus ventas a otro con
+  solo cambiar un campo del JSON.
+</p>
+
+<h3>Aislamiento entre colaboradores</h3>
+<p>
+  Si un colaborador consulta una reserva que existe pero pertenece a otro, la respuesta es
+  <strong><code>404</code>, no <code>403</code></strong>. Un 403 confirmaría que ese identificador
+  corresponde a una reserva real, y con suficientes intentos eso permite estimar el volumen de negocio
+  de la competencia. Está verificado en
+  <code>ApiKeyTests.Un_colaborador_no_puede_leer_la_reserva_de_otro</code>.
+</p>
+
+<h3>Limitación de peticiones</h3>
+<p>
+  El limitador nativo de .NET, con una <strong>partición por colaborador</strong> y una ventana fija de
+  un minuto. El cupo sale de <code>Partner.RateLimit</code>, es decir, del contrato de cada socio.
+</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Tráfico</th><th>Partición</th><th>Cupo por defecto</th></tr></thead>
+  <tbody>
+    <tr><td>Colaborador identificado</td><td><code>partner:{id}</code></td><td><code>Partner.RateLimit</code> — 500 pet/min en el colaborador de demostración</td></tr>
+    <tr><td>Sin credencial</td><td><code>anon:{ip}</code></td><td>300 pet/min</td></tr>
+    <tr><td><code>/health</code>, <code>/health/ready</code>, <code>/swagger</code></td><td>Exentas</td><td>Sin límite</td></tr>
+  </tbody>
+</table>
+</div>
+<p>
+  Que el cupo sea <em>por colaborador</em> y no global es lo que impide que un socio con un bucle mal
+  programado consuma el cupo de los demás. El límite anónimo es deliberadamente holgado porque detrás
+  de un NAT corporativo muchos usuarios legítimos comparten IP: la protección fina la da la credencial,
+  no la dirección.
+</p>
+<div class="note">
+  <span class="label">Dos decisiones pequeñas que evitan incidencias grandes</span>
+  <p>
+    <strong>Los health checks están exentos.</strong> Limitarlos significaría que, bajo un pico de
+    tráfico, el orquestador recibe <code>429</code> en el sondeo, da la instancia por caída y la
+    reinicia — convirtiendo un pico en una caída.
+  </p>
+  <p>
+    <strong>La cola de espera es cero y siempre se devuelve <code>Retry-After</code>.</strong> Encolar
+    bajo carga convierte un 429 inmediato, que el cliente puede reintentar con retroceso exponencial,
+    en latencia acumulada para todos. Y sin <code>Retry-After</code>, un cliente reintenta en bucle y
+    agrava el pico que provocó el rechazo.
+  </p>
+</div>
+<div class="note warn">
+  <span class="label">Límite conocido</span>
+  <p>
+    El estado del limitador es <strong>por instancia</strong>. Con N réplicas, el cupo efectivo es N
+    veces el configurado. Se acepta a sabiendas: un limitador distribuido exige Redis, y el objetivo
+    aquí es contener abusos, no facturar por petición. Está registrado en
+    <a href="#adr">ADR-007</a> con la señal que justificaría cambiarlo.
+  </p>
+</div>
+
+<h3>Rotación de claves <span class="badge design">Diseñado</span></h3>
+<p>
+  Periodo de gracia de 24 h con dos claves válidas a la vez (<code>ApiKeyHash</code> y
+  <code>ApiKeyHash_Previous</code>), para que rotar no implique una ventana de caída en el sistema del
+  colaborador. <code>ApiKeyHasher.Generate()</code> ya produce la clave y su hash; lo que falta es el
+  endpoint de administración y la segunda columna.
+</p>
+
+<h3>Medidas de transporte <span class="badge design">Producción</span></h3>
+<p>
+  HTTPS obligatorio, HSTS, CORS restringido a orígenes conocidos y
+  <code>X-Content-Type-Options: nosniff</code>. En este prototipo la API se sirve por HTTP plano porque
+  va detrás de <code>docker compose</code> en una red local; en un despliegue real la terminación TLS
+  es del <em>ingress</em>.
+</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="escalabilidad">
+<h2><span class="num">10</span>Escalabilidad</h2>
+
+<p>
+  <strong>La API no tiene estado.</strong> No hay sesión en memoria, no hay caché local con datos de
+  negocio, no hay afinidad de sesión. Escalar es añadir réplicas detrás de un balanceador. Es la
+  decisión que hace sencillo todo lo demás, y la razón por la que la idempotencia y la caducidad se
+  diseñaron para funcionar con N instancias desde el primer día.
+</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Capa</th><th>Hoy</th><th>Cuándo escalar y cómo</th></tr></thead>
+  <tbody>
+    <tr><td>API</td><td>N réplicas sin estado</td><td>Añadir réplicas. Es el eje barato.</td></tr>
+    <tr><td>Base de datos</td><td>Una instancia</td><td>Vertical primero. Réplicas de lectura para el catálogo cuando la CPU supere el 70 % sostenido.</td></tr>
+    <tr><td>Catálogo</td><td>Caché HTTP de 5 s en disponibilidad</td><td>Redis con TTL de 30 s cuando la lectura del catálogo domine la carga.</td></tr>
+    <tr><td>Escrituras de reserva</td><td>Contador atómico sobre una fila</td><td><strong>No escala horizontalmente por diseño</strong> — ver abajo.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>El límite real del diseño</h3>
+<p>
+  Las reservas de un mismo evento se serializan sobre una única fila. Las réplicas de lectura no
+  ayudan, porque son escrituras. Ese es el techo del enfoque, y conviene conocerlo antes de que lo
+  descubra producción.
+</p>
+<p>
+  Cuando un solo evento supere el orden de miles de reservas por segundo, la salida es
+  <strong>particionar el aforo en cubos</strong>: en lugar de una fila con
+  <code>Capacity = 100000</code>, cien filas con <code>Capacity = 1000</code> cada una, repartiendo a
+  los compradores entre cubos. La contención se divide por cien a cambio de complicar el conteo de
+  disponibilidad total y de tener que reequilibrar los cubos que se agoten antes que otros.
+</p>
+<p>
+  No está implementado porque es complejidad real contra un problema que aún no existe. Está escrito
+  aquí porque llegar tarde a esa decisión sale más barato que haberla tomado antes de necesitarla.
+</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="observabilidad">
+<h2><span class="num">11</span>Observabilidad</h2>
+
+<ul>
+  <li><strong>Logging estructurado</strong> con Serilog. Las líneas llevan propiedades consultables, no texto concatenado.</li>
+  <li>
+    <strong>Correlation ID</strong> propagado en <code>X-Correlation-Id</code>. Si el cliente lo envía
+    se respeta; si no, se genera. Va en la respuesta y en el contexto de log, de modo que todas las
+    líneas de una petición —<strong>incluidos los errores</strong>— comparten identificador. Es lo que
+    permite reconstruir qué pasó en una reserva concreta cuando un colaborador reporta una incidencia
+    con un identificador.
+  </li>
+  <li><strong>Health checks separados</strong>: liveness sin dependencias, readiness con ellas.</li>
+  <li>
+    <strong>Nivel de log correcto:</strong> una regla de negocio que rechaza una petición se registra
+    como <code>Warning</code>, no como <code>Error</code>. Un 409 por falta de aforo es funcionamiento
+    normal; si llena el panel de alertas, el panel se deja de mirar.
+  </li>
+  <li><span class="badge design">Fase 2</span> OpenTelemetry (trazas y métricas), Prometheus/Grafana, alertas sobre tasa de 409 y latencia p99 de reserva.</li>
+</ul>
+
+<div class="note">
+  <span class="label">La métrica que vigilaría en producción</span>
+  <p>
+    No la latencia media, sino <strong>la tasa de 409 sobre eventos con aforo disponible</strong>. Si
+    sube, hay contención real sobre una fila y toca mirar el particionado en cubos de
+    <a href="#escalabilidad">§10</a>. Es el indicador que convierte el techo teórico del diseño en una
+    alarma concreta.
+  </p>
+</div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="evolucion">
+<h2><span class="num">12</span>Plan de evolución</h2>
+
+<p>
+  <strong>Ninguna de estas cosas se hace «porque toca».</strong> Cada una lleva asociada una señal
+  medible, y hasta que la señal no aparezca, añadirla es coste sin beneficio.
+</p>
+
+<h3>Fase 1 — lo implementado</h3>
+<p>
+  Monolito modular, API REST, PostgreSQL, contador atómico, idempotencia, caducidad, autenticación por
+  API Key con permisos y aislamiento, limitación de peticiones, Serilog, health checks, y pruebas
+  unitarias y de integración contra PostgreSQL real.
+</p>
+
+<h3>Fase 2 — producción</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Añadir</th><th>Señal que lo dispara</th></tr></thead>
+  <tbody>
+    <tr><td>OAuth2/OIDC para portal y oficinas</td><td>Antes de exponer esos dos canales a tráfico real</td></tr>
+    <tr><td>Rotación de API Keys con periodo de gracia</td><td>Primer colaborador que pide rotar sin ventana de caída</td></tr>
+    <tr><td>Migraciones EF versionadas en el pipeline</td><td>Primer despliegue con más de una réplica</td></tr>
+    <tr><td>Limitador distribuido (Redis)</td><td>El cupo por instancia deja de ser suficiente porque hay muchas réplicas</td></tr>
+    <tr><td>Redis para el catálogo</td><td>Lecturas de catálogo &gt; 70 % de la carga</td></tr>
+    <tr><td>Réplicas de lectura</td><td>CPU de la base de datos &gt; 70 % sostenido</td></tr>
+    <tr><td>OpenTelemetry + Prometheus</td><td>Antes del primer incidente en producción, no después</td></tr>
+    <tr><td>Lock por usuario y evento (<code>pg_advisory_xact_lock</code>)</td><td>Si se detecta que alguien supera el límite por usuario</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Fase 3 — crecimiento</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Añadir</th><th>Señal que lo dispara</th></tr></thead>
+  <tbody>
+    <tr><td>Extraer Reservations a servicio propio</td><td>Es el cuello de botella <em>medido</em> <strong>y</strong> el equipo son 3+ células</td></tr>
+    <tr><td>Broker de mensajes para la caducidad</td><td>El sondeo ya no da la latencia requerida</td></tr>
+    <tr><td>Webhooks a colaboradores</td><td>Los colaboradores piden notificación en vez de sondear</td></tr>
+    <tr><td>Particionado del aforo en cubos</td><td>Un solo evento supera ~1.000 reservas/s</td></tr>
+    <tr><td>Trazado distribuido</td><td>Existe más de un servicio que trazar</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="adr">
+<h2><span class="num">13</span>Registro de decisiones (ADR)</h2>
+<p class="muted small">Doce decisiones con su contexto, la alternativa descartada y la consecuencia que se acepta.</p>
+
+<details class="adr" open>
+  <summary><span class="adr-id">ADR-001</span> Monolito modular</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>Plataforma multicanal, equipo pequeño, consistencia fuerte obligatoria en el aforo.</dd>
+      <dt>Decisión</dt><dd>Monolito modular con Clean Architecture, sin estado, N réplicas.</dd>
+      <dt>Descartado</dt><dd>Microservicios: requerirían saga o lock distribuido para lo que aquí es una transacción ACID.</dd>
+      <dt>Consecuencia</dt><dd>Despliegue único. Los módulos se pueden extraer más tarde porque las fronteras ya están marcadas por proyectos e interfaces de dominio.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-002</span> REST + JSON + OpenAPI</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>Colaboradores con tecnologías heterogéneas, incluidos POS heredados.</dd>
+      <dt>Decisión</dt><dd>REST sobre HTTP/JSON documentado con OpenAPI 3.</dd>
+      <dt>Descartado</dt><dd>gRPC (hostil para clientes heredados) y GraphQL (resuelve un problema que no tenemos y complica el cacheo HTTP).</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-003</span> PostgreSQL 16</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>Se necesitan garantías transaccionales reales.</dd>
+      <dt>Decisión</dt><dd>PostgreSQL 16.</dd>
+      <dt>Por qué</dt><dd>ACID, <code>FOR UPDATE SKIP LOCKED</code> (clave para la caducidad multi-réplica), índices parciales, <code>jsonb</code>, arrays nativos, proveedor EF Core maduro y sin coste de licencia.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-004</span> Contador atómico para el aforo</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>Miles de peticiones simultáneas sobre el mismo evento.</dd>
+      <dt>Decisión</dt><dd><code>UPDATE</code> condicional en una sola sentencia.</dd>
+      <dt>Descartado</dt><dd><code>SELECT FOR UPDATE</code> (más viajes, lock más largo) y concurrencia optimista (produce N−1 conflictos justo bajo carga máxima).</dd>
+      <dt>Consecuencia</dt><dd>La sobreventa es imposible por construcción. El coste es que las escrituras de un evento se serializan sobre una fila; el techo y su salida están en <a href="#escalabilidad">§10</a>.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-005</span> <code>Idempotency-Key</code> con huella del cuerpo</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>Los reintentos sobre redes ajenas son inevitables.</dd>
+      <dt>Decisión</dt><dd>Cabecera obligatoria en el <code>POST</code>, tabla cuya clave primaria actúa de exclusión mutua, SHA-256 del cuerpo para detectar reutilización, liberación de la key ante fallo y purga a las 24 h.</dd>
+      <dt>Consecuencia</dt><dd>El cliente debe generar la key. Es una carga real para el integrador y se documenta explícitamente en el contrato.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-006</span> API Key para colaboradores</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>Los colaboradores necesitan acceso programático con revocación inmediata.</dd>
+      <dt>Decisión</dt><dd>API Key con hash SHA-256 en base de datos, caché en memoria de 30 s, permisos por <em>scope</em> y <code>PartnerId</code> derivado siempre de la credencial.</dd>
+      <dt>Por qué no JWT solo</dt><dd>Un JWT emitido es válido hasta que caduca; revocarlo exige una lista de revocación que anula su ventaja. Para un socio que puede dejar de serlo de un día para otro, la revocación inmediata pesa más que ahorrar una consulta.</dd>
+      <dt>Consecuencia</dt><dd>Una consulta a base de datos cada 30 s por colaborador activo. El resultado negativo se cachea 5 s para que una clave inválida en bucle no sea un vector de denegación de servicio barato.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-007</span> Limitación de peticiones particionada por colaborador</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>El tráfico de los colaboradores no lo controlamos, y un integrador con un bucle mal programado puede degradar el servicio de todos.</dd>
+      <dt>Decisión</dt><dd>Limitador nativo de .NET con ventana fija de un minuto, partición por colaborador con el cupo de su contrato y partición por IP para el tráfico anónimo. Health checks y documentación exentos.</dd>
+      <dt>Descartado</dt><dd>Un límite global: protege la infraestructura pero deja que un socio consuma el cupo de los demás, que es justo el fallo que se quería evitar.</dd>
+      <dt>Consecuencia</dt><dd>El estado es por instancia: con N réplicas el cupo efectivo es N veces el configurado. Se acepta a sabiendas; un limitador distribuido exige Redis y el objetivo aquí es contener abusos, no facturar por petición.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-008</span> Caducidad por sondeo con <code>SKIP LOCKED</code></summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>Las reservas no confirmadas deben liberar aforo.</dd>
+      <dt>Decisión</dt><dd><code>BackgroundService</code> con sondeo periódico y toma de lote con <code>FOR UPDATE SKIP LOCKED</code>.</dd>
+      <dt>Por qué no un broker</dt><dd>Un componente de infraestructura completo para una latencia tolerable de decenas de segundos. <code>SKIP LOCKED</code> da seguridad multi-réplica sin infraestructura adicional.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-009</span> API sin estado</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>Crecimiento de tráfico impredecible en las aperturas de venta.</dd>
+      <dt>Decisión</dt><dd>Sin estado en memoria y sin afinidad de sesión.</dd>
+      <dt>Consecuencia</dt><dd>Obliga a que idempotencia y caducidad funcionen con N instancias, lo cual condicionó el diseño de ambas desde el principio.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-010</span> Controllers en lugar de Minimal APIs</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>El enunciado indica que se valorará el uso de Minimal APIs.</dd>
+      <dt>Decisión</dt><dd>Se mantienen los Controllers de MVC.</dd>
+      <dt>Por qué</dt><dd>Con seis grupos de endpoints, filtros transversales de validación, atributos de cacheo por acción y metadatos <code>ProducesResponseType</code> para generar el contrato OpenAPI que consumirán los colaboradores, el modelo de Controllers deja el código más organizado: un filtro registrado una vez cubre toda la superficie de la API.</dd>
+      <dt>Honestidad sobre la alternativa</dt><dd>Minimal APIs es igual de capaz —soporta filtros de endpoint, <code>TypedResults</code> y grupos— y desde .NET 8 el rendimiento es equivalente. Es una preferencia argumentada, no una limitación técnica, y la migración sería mecánica: los casos de uso ya están en <code>Application</code> y los controladores no contienen lógica de negocio.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-011</span> Reintentos de conexión desactivados</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd><code>EnableRetryOnFailure</code> de Npgsql y las transacciones explícitas interactúan mal.</dd>
+      <dt>Decisión</dt><dd>Reintentos desactivados; <code>UnitOfWork</code> pasa igualmente por <code>CreateExecutionStrategy()</code>.</dd>
+      <dt>Por qué</dt><dd>La estrategia de reintentos solo puede reintentar una unidad de trabajo completa. Reintentar una que ya añadió entidades al <em>change tracker</em> duplicaría esos <code>INSERT</code>. Hacerlo bien exige rehidratar el <code>DbContext</code> en cada intento, lo cual complica el flujo más de lo que aporta en este alcance.</dd>
+      <dt>Consecuencia</dt><dd>El patrón correcto ya está en el código: activar los reintentos es cambiar una línea de configuración y garantizar que la operación sea reentrante, no reescribir el flujo.</dd>
+    </dl>
+  </div>
+</details>
+
+<details class="adr">
+  <summary><span class="adr-id">ADR-012</span> Pruebas de integración contra PostgreSQL real</summary>
+  <div class="body">
+    <dl>
+      <dt>Contexto</dt><dd>Hay que verificar concurrencia, idempotencia, caducidad y aislamiento.</dd>
+      <dt>Decisión</dt><dd>Testcontainers con PostgreSQL 16 real. Se descarta el proveedor InMemory de EF Core.</dd>
+      <dt>Por qué</dt><dd>Todo lo que hace interesante a este sistema depende del motor: el <code>UPDATE</code> condicional, la violación de clave primaria como exclusión mutua, <code>FOR UPDATE SKIP LOCKED</code> y los índices parciales. InMemory no implementa nada de eso. Los tests pasarían en verde sin probar nada de lo que importa, que es peor que no tenerlos: dan confianza injustificada.</dd>
+      <dt>Consecuencia</dt><dd>La suite de integración exige Docker. Los tests unitarios no.</dd>
+    </dl>
+  </div>
+</details>
+</section>
+
+<!-- ==================================================================== -->
+<section id="alcance">
+<h2><span class="num">14</span>Alcance declarado</h2>
+
+<p>
+  Se enumera de forma explícita para que la revisión no tenga que descubrirlo. Todo lo de esta lista se
+  dejó fuera a propósito y con un motivo, no por olvido.
+</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Área</th><th>Estado</th><th>Motivo</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>OAuth2/OIDC para portal y oficinas</td>
+      <td><span class="badge design">Diseñado</span></td>
+      <td>Exige un proveedor de identidad externo que no forma parte del prototipo. Simularlo demostraría que sé firmar un JWT, no que el sistema esté protegido.</td>
+    </tr>
+    <tr>
+      <td>Rotación de API Keys con periodo de gracia</td>
+      <td><span class="badge design">Diseñado</span></td>
+      <td>El generador de claves ya existe; faltan el endpoint de administración y la columna <code>ApiKeyHash_Previous</code>.</td>
+    </tr>
+    <tr>
+      <td>Limitador de peticiones distribuido</td>
+      <td><span class="badge design">Fase 2</span></td>
+      <td>El actual es por instancia. Ver <a href="#adr">ADR-007</a>.</td>
+    </tr>
+    <tr>
+      <td>Pasarela de pago y confirmación</td>
+      <td><span class="badge out">Fuera de alcance</span></td>
+      <td>El dominio ya soporta la transición <code>Confirm()</code>; el cobro es un sistema entero aparte.</td>
+    </tr>
+    <tr>
+      <td>Portal web</td>
+      <td><span class="badge out">Fuera de alcance</span></td>
+      <td>El enunciado pide un cliente de consola. El cliente cumple el papel de canal y demuestra que el contrato REST se sostiene solo.</td>
+    </tr>
+    <tr>
+      <td>.NET Aspire</td>
+      <td><span class="badge out">No usado</span></td>
+      <td>El enunciado lo sugería. Para dos contenedores, <code>docker compose</code> cubre la orquestación con menos piezas móviles y sin exigir que quien revise tenga el <em>workload</em> instalado. La migración sería directa: el proyecto ya está parametrizado por configuración.</td>
+    </tr>
+    <tr>
+      <td>Migraciones EF versionadas</td>
+      <td><span class="badge design">Ver abajo</span></td>
+      <td>El esquema se crea desde el modelo al arrancar para que el prototipo funcione recién clonado.</td>
+    </tr>
+    <tr>
+      <td>Redis, réplicas de lectura, OpenTelemetry</td>
+      <td><span class="badge design">Fase 2</span></td>
+      <td>Cada uno con su señal en <a href="#evolucion">§12</a>.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Sobre las migraciones</h3>
+<p>
+  Al arrancar, la API aplica las migraciones si existen y, si no hay ninguna, crea el esquema desde el
+  modelo dejando un aviso en el log. El prototipo arranca siempre, recién clonado y sin pasos previos.
+  Para generar la migración inicial:
+</p>
+<pre><code>dotnet tool install --global dotnet-ef
+dotnet ef migrations add InitialCreate \
+  --project src/FunEvents.Infrastructure \
+  --startup-project src/FunEvents.Api</code></pre>
+<p>
+  En producción esto no se hace al arrancar la API, sino como paso del pipeline de despliegue: N
+  réplicas arrancando a la vez no deben competir por migrar, y el SQL debe poder revisarse antes de
+  aplicarse.
+</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="ejecucion">
+<h2><span class="num">15</span>Punto 2 — Cómo ejecutar el prototipo</h2>
+
+<p>
+  El segundo punto del enunciado pide <em>un prototipo mínimo de un cliente de consola que realiza la
+  reserva de entradas para un evento a partir de un código de evento y de usuario ya conocidos, a
+  través de una API web que también debe implementar el candidato</em>. Eso es exactamente lo que hay
+  en el repositorio: la API y el cliente, cada uno en su proyecto, comunicándose solo por HTTP.
+</p>
+
+<h3>Requisito único: Docker</h3>
+<pre><code>git clone &lt;url-del-repositorio&gt;
+cd FunEvents
+docker compose up --build</code></pre>
+<p>
+  Levanta PostgreSQL 16 y la API, crea el esquema y siembra los datos de demostración. Sin pasos
+  previos y sin ningún fichero de configuración que rellenar.
+</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Recurso</th><th>URL</th></tr></thead>
+  <tbody>
+    <tr><td>Swagger / OpenAPI</td><td><code>http://localhost:8080/swagger</code></td></tr>
+    <tr><td>Catálogo</td><td><code>http://localhost:8080/api/v1/events</code></td></tr>
+    <tr><td>Liveness</td><td><code>http://localhost:8080/health</code></td></tr>
+    <tr><td>Readiness</td><td><code>http://localhost:8080/health/ready</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>El cliente de consola</h3>
+<p>En otra terminal, con la API ya levantada:</p>
+<pre><code><span class="c"># Demo completa sin intervencion: es la via recomendada para la revision</span>
+dotnet run --project clients/FunEvents.ConsoleClient -- --demo
+
+<span class="c"># Menu interactivo</span>
+dotnet run --project clients/FunEvents.ConsoleClient
+
+<span class="c"># Apuntando a otra URL, o presentando una API Key desde el principio</span>
+dotnet run --project clients/FunEvents.ConsoleClient -- --demo \
+  --url http://localhost:9090 \
+  --api-key funevents-demo-partner-key</code></pre>
+
+<h3>Una petición a mano</h3>
+<pre><code>curl -i -X POST http://localhost:8080/api/v1/reservations \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d '{
+        "eventId": "a0000000-0000-0000-0000-000000000001",
+        "userId":  "b0000000-0000-0000-0000-000000000001",
+        "ticketQuantity": 2,
+        "channel": "Online"
+      }'</code></pre>
+<p>
+  Repetir el comando <strong>con la misma key</strong> devuelve <code>200 OK</code> y la misma reserva
+  con <code>previouslyCreated: true</code>, en lugar de crear una segunda.
+</p>
+
+<p>Y por el canal de colaboradores, que exige credencial:</p>
+<pre><code>curl -i -X POST http://localhost:8080/api/v1/reservations \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "X-Api-Key: funevents-demo-partner-key" \
+  -d '{
+        "eventId": "a0000000-0000-0000-0000-000000000001",
+        "userId":  "b0000000-0000-0000-0000-000000000001",
+        "ticketQuantity": 1,
+        "channel": "Partner"
+      }'</code></pre>
+<p class="small muted">
+  El <code>partnerId</code> de la respuesta lo fija el servidor a partir de la clave; enviarlo en el
+  cuerpo devuelve <code>400</code>. El fichero
+  <code>src/FunEvents.Api/FunEvents.Api.http</code> contiene todas estas peticiones listas para
+  ejecutar desde el IDE, incluidos todos los casos de error.
+</p>
+
+<h3>Si algún puerto está ocupado</h3>
+<pre><code>FUNEVENTS_API_PORT=9090 FUNEVENTS_DB_PORT=55432 docker compose up --build
+dotnet run --project clients/FunEvents.ConsoleClient -- --demo --url http://localhost:9090</code></pre>
+<p>
+  PostgreSQL <strong>no</strong> se publica en el 5432 por defecto, precisamente porque es habitual
+  tenerlo ocupado por una instalación local. La API no lo necesita: dentro de la red de Compose habla
+  con <code>db:5432</code> directamente. El mapeo al host solo sirve para inspeccionar la base a mano:
+</p>
+<pre><code>docker compose exec db psql -U funevents -d funevents</code></pre>
+
+<h3>Sin Docker para la API</h3>
+<pre><code><span class="c"># 1. Solo PostgreSQL</span>
+docker run -d --name funevents-db \
+  -e POSTGRES_DB=funevents -e POSTGRES_USER=funevents -e POSTGRES_PASSWORD=funevents \
+  -p 5432:5432 postgres:16-alpine
+
+<span class="c"># 2. API</span>
+dotnet run --project src/FunEvents.Api
+
+<span class="c"># 3. Cliente</span>
+dotnet run --project clients/FunEvents.ConsoleClient</code></pre>
+</section>
+
+<!-- ==================================================================== -->
+<section id="demo">
+<h2><span class="num">16</span>Qué demuestra la demo</h2>
+
+<p>
+  <code>--demo</code> recorre ocho bloques sin intervención. Los dos últimos son los que valen la pena
+  mirar con atención.
+</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>#</th><th>Bloque</th><th>Qué se comprueba</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Catálogo de eventos</td><td>Paginación y disponibilidad calculada.</td></tr>
+    <tr><td>2</td><td>Usuarios conocidos</td><td>Los códigos de usuario que pide el enunciado.</td></tr>
+    <tr><td>3</td><td>Reserva de punta a punta</td><td><code>201</code>, cabecera <code>Location</code> y relectura del recurso creado.</td></tr>
+    <tr><td>4</td><td>Rechazo por usuario inactivo</td><td><code>422 USER_INACTIVE</code> con <code>errorCode</code> estable.</td></tr>
+    <tr><td>5</td><td>Idempotencia</td><td>Tres peticiones con la misma key producen un solo <code>reservationId</code>: la primera <code>201</code>, las siguientes <code>200</code> con <code>previouslyCreated: true</code>. Y la misma key con otra cantidad devuelve <code>422</code>.</td></tr>
+    <tr><td>6</td><td>Canal de colaboradores</td><td>Sin clave <code>401</code>; clave inexistente <code>401</code>; colaborador dado de baja <code>401</code>; clave sin permiso <code>403</code>; clave autorizada <code>201</code> con el <code>partnerId</code> derivado. Y después: el propietario lee su reserva (<code>200</code>) y otro colaborador recibe <code>404</code>.</td></tr>
+    <tr><td>7</td><td>Límite de peticiones</td><td>Lanza peticiones al catálogo con la clave de un colaborador cuyo cupo son 60 pet/min y muestra en qué número llega el <code>429</code> y qué <code>Retry-After</code> devuelve.</td></tr>
+    <tr><td>8</td><td>Concurrencia</td><td><strong>15 peticiones simultáneas contra un evento de 10 plazas: exactamente 10 aceptadas, 5 rechazadas con <code>409</code> y aforo restante 0.</strong></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note ok">
+  <span class="label">La comprobación que importa</span>
+  <p>
+    Si el número de reservas aceptadas en el bloque 8 no es exactamente el aforo disponible, hay
+    sobreventa. Es la única aserción innegociable de todo el sistema, y se puede verificar de forma
+    independiente sin fiarse de la salida de la consola:
+  </p>
+  <pre style="margin-top:10px;margin-bottom:0"><code>docker compose exec db psql -U funevents -d funevents -c \
+  'SELECT "Name","Capacity","ReservedCount" FROM "Events" ORDER BY "Name";'</code></pre>
+</div>
+
+<p class="small muted">
+  Nota sobre el bloque 7: consume el cupo del minuto en curso del colaborador de solo lectura. Si
+  ejecutas la demo dos veces seguidas, ese colaborador puede responder <code>429</code> antes de lo
+  esperado en el bloque 6. Es el comportamiento correcto del limitador, no un fallo.
+</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="datos-demo">
+<h2><span class="num">17</span>Datos sembrados</h2>
+<p>Son los «códigos de evento y de usuario ya conocidos» que pide el enunciado.</p>
+
+<h3>Eventos</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Código</th><th>Nombre</th><th>Aforo</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr><td><code>a0000000-…-000000000001</code></td><td>FunFest 2026</td><td>100</td><td>Publicado</td></tr>
+    <tr><td><code>a0000000-…-000000000002</code></td><td>TechConf 2026</td><td>25</td><td>Publicado</td></tr>
+    <tr><td><code>a0000000-…-000000000003</code></td><td>Comedy Night</td><td>10</td><td>Publicado — <em>evento de la prueba de concurrencia</em></td></tr>
+    <tr><td><code>a0000000-…-000000000004</code></td><td>Ensayo General</td><td>50</td><td><strong>Borrador</strong> — <em>prueba el 422</em></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Usuarios</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Código</th><th>Nombre</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr><td><code>b0000000-…-000000000001</code></td><td>Ana Martínez</td><td>Activa</td></tr>
+    <tr><td><code>b0000000-…-000000000002</code></td><td>Carlos Rojas</td><td>Activo</td></tr>
+    <tr><td><code>b0000000-…-000000000003</code></td><td>Usuario Inactivo</td><td><strong>Inactivo</strong> — <em>prueba el 422</em></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Colaboradores</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Nombre</th><th>API Key</th><th>Permisos</th><th>Cupo</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Ticketera Aliada S.A.</td>
+      <td><code>funevents-demo-partner-key</code></td>
+      <td>events:read<br>reservations:create<br>reservations:read</td>
+      <td>500/min</td>
+      <td>Activo</td>
+    </tr>
+    <tr>
+      <td>Portal Solo Consulta</td>
+      <td><code>funevents-demo-partner-key-readonly</code></td>
+      <td>events:read<br>reservations:read</td>
+      <td>60/min</td>
+      <td>Activo — <em>prueba el 403 y el 429</em></td>
+    </tr>
+    <tr>
+      <td>Colaborador Dado de Baja</td>
+      <td><code>funevents-demo-partner-key-revoked</code></td>
+      <td>—</td>
+      <td>—</td>
+      <td><strong>Inactivo</strong> — <em>prueba el 401 por revocación</em></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note warn">
+  <span class="label">Sobre estas claves</span>
+  <p>
+    Son credenciales de datos de ejemplo, fijas a propósito para que quien revise el prototipo pueda
+    ejercitar el canal de colaboradores sin darse de alta. <strong>En la base de datos se persiste
+    únicamente su SHA-256</strong>; la clave en claro no se almacena ni aparece en ningún log. En un
+    despliegue real el alta de un colaborador usa <code>ApiKeyHasher.Generate()</code>, que devuelve la
+    clave una sola vez y guarda solo su hash.
+  </p>
+</div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="pruebas">
+<h2><span class="num">18</span>Pruebas automáticas</h2>
+
+<pre><code><span class="c"># Unitarios: dominio y casos de uso. No necesitan nada.</span>
+dotnet test tests/FunEvents.UnitTests
+
+<span class="c"># Integracion: API completa contra PostgreSQL real. Requiere Docker.</span>
+dotnet test tests/FunEvents.IntegrationTests</code></pre>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Suite</th><th>Qué cubre</th></tr></thead>
+  <tbody>
+    <tr><td><code>UnitTests/Domain</code></td><td>Invariantes de <code>Event</code> y <code>Reservation</code>: transiciones de estado válidas e inválidas, aforo, cantidades.</td></tr>
+    <tr><td><code>UnitTests/Application</code></td><td>El caso de uso de reserva con dobles de prueba: liberación de la key ante fallo, reutilización con cuerpo distinto, petición en curso, límite por usuario.</td></tr>
+    <tr><td><code>IntegrationTests/Catalog</code></td><td>Paginación, búsqueda, disponibilidad y 404.</td></tr>
+    <tr><td><code>IntegrationTests/Reservations</code></td><td>Camino feliz, todos los códigos de error y <strong><code>Mas_peticiones_que_plazas_nunca_produce_sobreventa</code></strong>, que es la prueba que sostiene el sistema entero.</td></tr>
+    <tr><td><code>IntegrationTests/Security</code></td><td>Catálogo público sin credencial, 401 por clave inválida y por clave revocada, 401 sin credencial en canal Partner, 403 por falta de permiso, 201 con <code>partnerId</code> derivado, 400 por <code>partnerId</code> en el cuerpo y 404 al leer la reserva de otro colaborador. Más la función de particionado del limitador.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <span class="label">Por qué PostgreSQL real y no el proveedor InMemory</span>
+  <p>
+    Todo lo relevante de este sistema depende del motor: el <code>UPDATE</code> condicional que impide
+    la sobreventa, la clave primaria como exclusión mutua, <code>FOR UPDATE SKIP LOCKED</code> y los
+    índices parciales. InMemory no implementa nada de eso, así que los tests pasarían en verde sin
+    probar nada de lo que importa — que es peor que no tenerlos, porque dan confianza injustificada. Se
+    usa Testcontainers con PostgreSQL 16 real (<a href="#adr">ADR-012</a>).
+  </p>
+</div>
+
+<p class="small muted">
+  Las pruebas de seguridad son las que impiden que la protección se degrade en silencio: un fallo de
+  autorización no rompe ninguna funcionalidad visible —la API sigue devolviendo <code>201</code> y la
+  demo sigue pasando—, así que sin estas aserciones, el día que alguien reordene el pipeline y deje la
+  autenticación detrás del controlador, nada avisaría.
+</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="trazabilidad">
+<h2><span class="num">19</span>Del enunciado a la solución</h2>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Lo que pide el enunciado</th><th>Dónde está resuelto</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>«Describir la arquitectura general de un sistema de venta de entradas»</td>
+      <td>Secciones <a href="#contexto">1</a> a <a href="#alcance">14</a>, con doce decisiones registradas y sus alternativas descartadas.</td>
+    </tr>
+    <tr>
+      <td>«El sistema debe gestionar la venta de entradas de distintos canales»</td>
+      <td><code>SalesChannel</code> como enum de primera clase —<code>Online</code>, <code>Office</code>, <code>Partner</code>—, persistido en cada reserva. <a href="#contexto">§1</a></td>
+    </tr>
+    <tr>
+      <td>«El canal principal es la venta online a través del portal de la empresa»</td>
+      <td>Canal por defecto de la API. <a href="#api">§4</a></td>
+    </tr>
+    <tr>
+      <td>«También se venden entradas desde las oficinas de atención al cliente existentes por todo el mundo»</td>
+      <td>Canal <code>Office</code>, con la distinción entre comprador y operador modelada. Su autenticación queda como diseño. <a href="#seguridad">§9</a></td>
+    </tr>
+    <tr>
+      <td>«Los colaboradores quieren personalizar la experiencia integrando el sistema con su propio portal o punto de venta»</td>
+      <td>Es el requisito que gobierna el diseño: API REST versionada, errores tipados, idempotencia obligatoria, autenticación por API Key, permisos, aislamiento y cuota propia. <a href="#contexto">§1</a>, <a href="#api">§4</a>, <a href="#seguridad">§9</a></td>
+    </tr>
+    <tr>
+      <td>«Prototipo mínimo de un cliente de consola que realiza la reserva»</td>
+      <td><code>clients/FunEvents.ConsoleClient</code>, sin ninguna referencia al servidor. <a href="#ejecucion">§15</a></td>
+    </tr>
+    <tr>
+      <td>«A partir de un código de evento y de usuario ya conocidos»</td>
+      <td>Datos sembrados deterministas. <a href="#datos-demo">§17</a></td>
+    </tr>
+    <tr>
+      <td>«A través de un api web que también debe implementar el candidato»</td>
+      <td><code>src/FunEvents.Api</code>, documentada con OpenAPI. <a href="#api">§4</a></td>
+    </tr>
+    <tr>
+      <td>«Una versión moderna de .NET (netcore 8 o superior)»</td>
+      <td>.NET 10 en toda la solución, con <code>TargetFramework</code> centralizado y gestión central de versiones de paquetes.</td>
+    </tr>
+    <tr>
+      <td>«ASP.NET Core Minimal APIs»</td>
+      <td>Se optó por Controllers, con el razonamiento y la alternativa en <a href="#adr">ADR-010</a>.</td>
+    </tr>
+    <tr>
+      <td>«Si se considera necesario, usar Postgres como base de datos»</td>
+      <td>PostgreSQL 16. Es necesario: la garantía anti-sobreventa se apoya en el motor. <a href="#adr">ADR-003</a></td>
+    </tr>
+    <tr>
+      <td>«y .NET Aspire como orquestador»</td>
+      <td>No usado; <code>docker compose</code>, con el motivo en <a href="#alcance">§14</a>.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<footer>
+  <p>
+    <strong>FunEvents</strong> — Documento de arquitectura y guía de ejecución del prototipo.
+    Prueba técnica de Ingeniero Programador .NET Core.
+  </p>
+  <p>
+    El código fuente, los tests y este documento viven en el mismo repositorio. Los diagramas se
+    generan con Mermaid en el navegador: no hay imágenes que puedan quedar desincronizadas del texto.
+  </p>
+</footer>
+
+</div>
+</main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  if (window.mermaid) {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      securityLevel: 'loose',
+      fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+      themeVariables: {
+        primaryColor: '#e8f0fa',
+        primaryTextColor: '#15181d',
+        primaryBorderColor: '#1f5fa9',
+        lineColor: '#5c6672',
+        secondaryColor: '#f7f8fa',
+        tertiaryColor: '#ffffff',
+        fontSize: '14px'
+      },
+      flowchart: { curve: 'basis', useMaxWidth: true },
+      sequence: { useMaxWidth: true, wrap: true, width: 200 },
+      er: { useMaxWidth: true }
+    });
+  }
+
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('aside nav a'));
+    var byId = {};
+    var order = [];
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      byId[id] = a;
+      order.push(id);
+    });
+
+    var visible = {};
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        visible[e.target.id] = e.isIntersecting;
+      });
+      var current = null;
+      for (var i = 0; i < order.length; i++) {
+        if (visible[order[i]]) { current = order[i]; break; }
+      }
+      links.forEach(function (a) { a.classList.remove('active'); });
+      if (current && byId[current]) byId[current].classList.add('active');
+    }, { rootMargin: '-8% 0px -70% 0px', threshold: 0 });
+
+    document.querySelectorAll('section[id]').forEach(function (s) { observer.observe(s); });
+
+    links.forEach(function (a) {
+      a.addEventListener('click', function () { document.body.classList.remove('nav-open'); });
+    });
+  })();
+</script>
+</body>
+</html>

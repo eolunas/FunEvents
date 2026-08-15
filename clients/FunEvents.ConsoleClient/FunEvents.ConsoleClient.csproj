@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>FunEvents.ConsoleClient</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    El cliente de consola NO referencia ningun proyecto del servidor.
+    Habla con la API solo por HTTP + JSON, igual que lo haria el portal
+    de un colaborador escrito en otro lenguaje. Si compartiera los DTOs
+    del servidor, la demo no probaria que el contrato REST es autosuficiente.
+  -->
+
+</Project>

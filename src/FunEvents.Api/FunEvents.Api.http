@@ -1,0 +1,204 @@
+@host = http://localhost:8080
+
+# Codigos sembrados (ver src/FunEvents.Infrastructure/Data/SeedData.cs)
+@funFest      = a0000000-0000-0000-0000-000000000001
+@techConf     = a0000000-0000-0000-0000-000000000002
+@comedyNight  = a0000000-0000-0000-0000-000000000003
+@draftEvent   = a0000000-0000-0000-0000-000000000004
+@ana          = b0000000-0000-0000-0000-000000000001
+@carlos       = b0000000-0000-0000-0000-000000000002
+@inactiveUser = b0000000-0000-0000-0000-000000000003
+
+# Claves de los colaboradores sembrados
+@partnerKey         = funevents-demo-partner-key
+@revokedPartnerKey  = funevents-demo-partner-key-revoked
+@readOnlyPartnerKey = funevents-demo-partner-key-readonly
+
+### Liveness
+GET {{host}}/health
+
+### Readiness (comprueba la base de datos)
+GET {{host}}/health/ready
+
+### Catalogo de eventos
+GET {{host}}/api/v1/events
+Accept: application/json
+
+### Busqueda por nombre (no distingue mayusculas)
+GET {{host}}/api/v1/events?search=funfest
+Accept: application/json
+
+### Usuarios de demostracion
+GET {{host}}/api/v1/users
+Accept: application/json
+
+### Disponibilidad en tiempo real
+GET {{host}}/api/v1/events/{{funFest}}/availability
+Accept: application/json
+
+### Reserva valida -> 201 Created
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-key-0001
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{ana}}",
+  "ticketQuantity": 2,
+  "channel": "Online"
+}
+
+### Reintento con la MISMA key -> 200 OK, misma reserva, previouslyCreated: true
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-key-0001
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{ana}}",
+  "ticketQuantity": 2,
+  "channel": "Online"
+}
+
+### Misma key con cuerpo DISTINTO -> 422 IDEMPOTENCY_KEY_REUSED
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-key-0001
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{ana}}",
+  "ticketQuantity": 5,
+  "channel": "Online"
+}
+
+### Evento en borrador -> 422 EVENT_NOT_PUBLISHED
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-key-draft
+
+{
+  "eventId": "{{draftEvent}}",
+  "userId": "{{ana}}",
+  "ticketQuantity": 1
+}
+
+### Usuario inactivo -> 422 USER_INACTIVE
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-key-inactive
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{inactiveUser}}",
+  "ticketQuantity": 1
+}
+
+### Usuario inexistente -> 404 USER_NOT_FOUND
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-key-ghost
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "b0000000-0000-0000-0000-0000000000ff",
+  "ticketQuantity": 1
+}
+
+### Por encima del maximo por peticion -> 400 con detalle de validacion
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-key-toomany
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{carlos}}",
+  "ticketQuantity": 99
+}
+
+### Falta el header Idempotency-Key -> 400
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{carlos}}",
+  "ticketQuantity": 1
+}
+
+###############################################################################
+# Canal de colaboradores: autenticacion por API Key
+###############################################################################
+
+### Canal Partner sin cabecera X-Api-Key -> 401 API_KEY_REQUIRED
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-partner-sin-clave
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{carlos}}",
+  "ticketQuantity": 1,
+  "channel": "Partner"
+}
+
+### Clave inexistente -> 401 INVALID_API_KEY (en cualquier ruta, incluso publica)
+GET {{host}}/api/v1/events
+X-Api-Key: clave-que-no-existe
+
+### Clave de un colaborador dado de baja -> 401
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-partner-revocado
+X-Api-Key: {{revokedPartnerKey}}
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{carlos}}",
+  "ticketQuantity": 1,
+  "channel": "Partner"
+}
+
+### Clave valida sin el permiso reservations:create -> 403 INSUFFICIENT_SCOPE
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-partner-sin-scope
+X-Api-Key: {{readOnlyPartnerKey}}
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{carlos}}",
+  "ticketQuantity": 1,
+  "channel": "Partner"
+}
+
+### Clave valida y autorizada -> 201, con partnerId derivado de la credencial
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-partner-ok
+X-Api-Key: {{partnerKey}}
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{carlos}}",
+  "ticketQuantity": 1,
+  "channel": "Partner"
+}
+
+### PartnerId en el cuerpo -> 400. La identidad no viaja con los datos.
+POST {{host}}/api/v1/reservations
+Content-Type: application/json
+Idempotency-Key: demo-partner-suplantacion
+X-Api-Key: {{partnerKey}}
+
+{
+  "eventId": "{{funFest}}",
+  "userId": "{{carlos}}",
+  "ticketQuantity": 1,
+  "channel": "Partner",
+  "partnerId": "c0000000-0000-0000-0000-000000000002"
+}
+
+### Consultar una reserva (sustituye el id por uno real)
+GET {{host}}/api/v1/reservations/00000000-0000-0000-0000-000000000000
+Accept: application/json

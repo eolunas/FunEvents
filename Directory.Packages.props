@@ -1,0 +1,103 @@
+<Project>
+
+  <!--
+    Central Package Management (CPM).
+    Una sola fuente de verdad para las versiones de NuGet: los .csproj
+    declaran <PackageReference Include="..." /> SIN Version.
+
+    Motivo: antes de esto la solucion mezclaba paquetes 8.0.0 con 10.0.11
+    sobre net10.0, lo que produce NU1605 (package downgrade) y un grafo
+    de dependencias inconsistente en tiempo de ejecucion.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- Version unica para todo lo que Microsoft publica en banda con .NET 10 -->
+  <PropertyGroup>
+    <MicrosoftVersion>10.0.0</MicrosoftVersion>
+  </PropertyGroup>
+
+  <ItemGroup Label="Microsoft / .NET 10">
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="$(MicrosoftVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Persistencia">
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Validacion / Observabilidad / OpenAPI">
+    <PackageVersion Include="FluentValidation" Version="11.11.0" />
+    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <!--
+      Swashbuckle 10.x es obligatorio aqui, no una preferencia: es la primera
+      version compilada contra Microsoft.OpenApi 2.x. Con Swashbuckle 9.x, la
+      referencia a Microsoft.AspNetCore.OpenApi 10.x eleva Microsoft.OpenApi a
+      2.x y Swashbuckle 9 fallaria en tiempo de EJECUCION buscando tipos del
+      namespace Microsoft.OpenApi.Models, que en 2.x ya no existe.
+    -->
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+  </ItemGroup>
+
+  <!--
+    Pins de seguridad sobre dependencias TRANSITIVAS.
+
+    Ninguno de estos paquetes se referencia directamente: llegan arrastrados por
+    otros y `dotnet restore` los reporta con NU1903 (vulnerabilidad conocida).
+    Como este fichero tiene CentralPackageTransitivePinningEnabled, declarar aqui
+    la version basta para elevarlos en todo el grafo, sin ensuciar ningun .csproj
+    con una referencia a algo que el proyecto no usa.
+
+    Un aviso de vulnerabilidad que se deja pasar "porque es transitivo" es la
+    forma habitual de que una CVE llegue a produccion: el paquete acaba en el
+    contenedor igual, lo referencie quien lo referencie.
+  -->
+  <ItemGroup Label="Seguridad - pins de dependencias transitivas">
+    <!--
+      Llega via el grafo de EF Core / Npgsql.
+      GHSA-mmjf-rqrv-855v y siete avisos hermanos afectan a >= 10.0.0, <= 10.0.9
+      (denegacion de servicio en EncryptedXml). El primer parche de la rama 10 es
+      el 10.0.10; aqui se fija el 10.0.11, que es el ultimo publicado.
+
+      No usa $(MicrosoftVersion) a proposito: esa propiedad marca la version del
+      stack de .NET 10 con la que se compila, y esto es un parche de servicing de
+      un unico paquete. Atarlos obligaria a mover todo el stack por una CVE de
+      una sola libreria.
+    -->
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.11" />
+
+    <!--
+      Llega via Testcontainers, que lo usa para hablar con un demonio Docker
+      remoto por SSH. GHSA-q939-rpr3-3284 (path traversal en descargas SCP
+      recursivas) afecta a todo <= 2025.1.0; el parche es 2026.0.0.
+
+      Esta ruta no se ejercita en este proyecto -los tests hablan con el Docker
+      local-, pero el paquete se restaura y se despliega igual, asi que se
+      actualiza en lugar de silenciar el aviso.
+    -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="FluentAssertions" Version="6.12.2" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="$(MicrosoftVersion)" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.0.2" />
+  </ItemGroup>
+
+</Project>
