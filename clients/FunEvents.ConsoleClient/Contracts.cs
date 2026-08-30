@@ -29,6 +29,13 @@ public record PagedResponse<T>
     public int TotalPages { get; init; }
 }
 
+public record ReservationUrlDto
+{
+    public Guid ReservationId { get; init; }
+    public Guid? PartnerId { get; init; }
+    public string Url { get; init; } = string.Empty;
+}
+
 public record UserDto
 {
     public Guid Id { get; init; }

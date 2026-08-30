@@ -16,4 +16,12 @@ public interface IReservationService
         CreateReservationRequest request, string idempotencyKey, CancellationToken ct = default);
 
     Task<ReservationResponse?> GetByIdAsync(Guid reservationId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Devuelve la URL publica de una reserva junto con los datos necesarios
+    /// para que el llamante aplique el mismo aislamiento entre colaboradores
+    /// que <see cref="GetByIdAsync"/>. <see langword="null"/> si la reserva no
+    /// existe.
+    /// </summary>
+    Task<ReservationUrlResponse?> GetUrlByIdAsync(Guid reservationId, CancellationToken ct = default);
 }

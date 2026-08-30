@@ -132,8 +132,36 @@ public class ReservationsController : ControllerBase
         return Ok(reservation);
     }
 
-    private bool IsVisibleToCaller(ReservationResponse reservation)
-        => !User.IsPartner() || reservation.PartnerId == User.GetPartnerId();
+    /// <summary>Consulta Url de una reserva.</summary>
+    /// <remarks>
+    /// <b>Aislamiento entre colaboradores.</b> Si quien pregunta es un
+    /// colaborador y la reserva no es suya, la respuesta es <c>404</c> y no
+    /// <c>403</c>. Un 403 confirmaria que ese identificador existe, y la
+    /// existencia de una reserva ajena ya es informacion que no le corresponde:
+    /// con suficientes intentos, un 403 permite estimar el volumen de negocio
+    /// de la competencia.
+    /// </remarks>
+    [HttpGet("url/{reservationId:guid}", Name = nameof(GetURLById))]
+    [ProducesResponseType(typeof(ReservationUrlResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ReservationUrlResponse>> GetURLById(Guid reservationId, CancellationToken ct)
+    {
+        var reservationUrl = await _reservations.GetUrlByIdAsync(reservationId, ct);
+
+        if (reservationUrl is null || !IsVisibleToCaller(reservationUrl.PartnerId))
+            return ProblemResult(
+                StatusCodes.Status404NotFound,
+                "Reservation not found",
+                $"Reservation {reservationId} does not exist.",
+                "RESERVATION_NOT_FOUND");
+
+        return Ok(reservationUrl);
+    }
+
+    private bool IsVisibleToCaller(ReservationResponse reservation) => IsVisibleToCaller(reservation.PartnerId);
+
+    private bool IsVisibleToCaller(Guid? partnerId)
+        => !User.IsPartner() || partnerId == User.GetPartnerId();
 
     private ObjectResult ProblemResult(int status, string title, string detail, string errorCode)
         => new(ApiProblem.Create(HttpContext, status, title, detail, errorCode))

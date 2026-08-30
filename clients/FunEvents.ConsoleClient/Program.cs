@@ -87,6 +87,7 @@ internal static class Program
             Console.WriteLine("  8. Canal de colaboradores (API Key y aislamiento)");
             Console.WriteLine("  9. Limite de peticiones (rate limiting)");
             Console.WriteLine(" 10. Demo completa");
+            Console.WriteLine(" 11. Consultar la URL de una reserva");
             Console.WriteLine("  0. Salir");
             Console.Write("\n  Opcion: ");
 
@@ -116,6 +117,7 @@ internal static class Program
                     case "8": await DemoPartnerChannel(client); break;
                     case "9": await DemoRateLimiting(client); break;
                     case "10": await RunFullDemo(client); break;
+                    case "11": await CheckReservationUrl(client); break;
                     case "0": return;
                     default: Console.WriteLine("  Opcion no valida."); break;
                 }
@@ -226,6 +228,25 @@ internal static class Program
         }
 
         PrintReservation(await client.GetReservationAsync(id));
+    }
+
+    private static async Task CheckReservationUrl(FunEventsApiClient client)
+    {
+        Console.Write("  Codigo de reserva: ");
+        if (!Guid.TryParse(Console.ReadLine(), out var id))
+        {
+            Error("Codigo no valido.");
+            return;
+        }
+
+        var result = await client.GetReservationUrlAsync(id);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            Error(result.Describe());
+            return;
+        }
+
+        Console.WriteLine($"  URL: {result.Value.Url}");
     }
 
     /// <summary>

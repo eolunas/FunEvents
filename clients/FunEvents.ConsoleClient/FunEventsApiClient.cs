@@ -113,6 +113,11 @@ public class FunEventsApiClient
         return SendAsync<ReservationResponse>(request, ct);
     }
 
+    public Task<ApiResult<ReservationUrlDto>> GetReservationUrlAsync(
+        Guid reservationId, CancellationToken ct = default)
+        => SendAsync<ReservationUrlDto>(
+            new HttpRequestMessage(HttpMethod.Get, $"/api/v1/reservations/url/{reservationId}"), ct);
+
     public async Task<bool> IsReachableAsync(CancellationToken ct = default)
     {
         try

@@ -130,6 +130,34 @@ public class ReservationService : IReservationService
 
         return Map(reservation, @event, user, previouslyCreated: false);
     }
+    // ------------------------------------------------------------------------
+
+    /// <remarks>
+    /// <b>Que estaba mal antes.</b> La URL se construia con
+    /// <c>{channel}/{eventId}</c>: dos reservas distintas del mismo evento y
+    /// canal (dos usuarios comprando la misma funcion por Online, por
+    /// ejemplo) producian exactamente la misma URL. No identificaba una
+    /// reserva, identificaba un evento. Ademas el metodo no estaba declarado
+    /// en <see cref="IReservationService"/> -el controlador no compilaba- y
+    /// devolvia un <see langword="string"/> suelto en vez de un DTO, con lo
+    /// que no habia forma de aplicar el aislamiento entre colaboradores que
+    /// si tiene <see cref="GetByIdAsync"/>.
+    /// </remarks>
+    public async Task<ReservationUrlResponse?> GetUrlByIdAsync(Guid reservationId, CancellationToken ct = default)
+    {
+        var reservation = await _reservations.GetByIdAsync(reservationId, ct);
+        if (reservation is null) return null;
+
+        var channel = Uri.EscapeDataString(reservation.Channel.ToString());
+        var url = $"{_policy.ReservationUrlBase.TrimEnd('/')}/{channel}/{reservation.Id}";
+
+        return new ReservationUrlResponse
+        {
+            ReservationId = reservation.Id,
+            PartnerId = reservation.PartnerId,
+            Url = url
+        };
+    }
 
     // ------------------------------------------------------------------
 

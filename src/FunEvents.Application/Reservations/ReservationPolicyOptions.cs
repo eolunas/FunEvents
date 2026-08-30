@@ -31,4 +31,11 @@ public sealed class ReservationPolicyOptions
 
     /// <summary>Intervalo entre sondeos mientras se espera a esa otra peticion.</summary>
     public TimeSpan IdempotencyPollInterval { get; set; } = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>
+    /// Origen (esquema + host, sin barra final) usado para construir la URL
+    /// publica de una reserva. Configurable para no fijar en el codigo un
+    /// dominio distinto por entorno (local, staging, produccion).
+    /// </summary>
+    public string ReservationUrlBase { get; set; } = "https://urlbase.co";
 }
