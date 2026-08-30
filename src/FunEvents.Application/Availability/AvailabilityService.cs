@@ -2,20 +2,11 @@ using FunEvents.Domain.Interfaces;
 
 namespace FunEvents.Application.Availability;
 
-public class AvailabilityService : IAvailabilityService
+public class AvailabilityService(IEventRepository events, TimeProvider clock) : IAvailabilityService
 {
-    private readonly IEventRepository _events;
-    private readonly TimeProvider _clock;
-
-    public AvailabilityService(IEventRepository events, TimeProvider clock)
-    {
-        _events = events;
-        _clock = clock;
-    }
-
     public async Task<AvailabilityResponse?> GetAvailabilityAsync(Guid eventId, CancellationToken ct = default)
     {
-        var @event = await _events.GetByIdAsync(eventId, ct);
+        var @event = await events.GetByIdAsync(eventId, ct);
         if (@event is null) return null;
 
         return new AvailabilityResponse
@@ -26,7 +17,7 @@ public class AvailabilityService : IAvailabilityService
             ReservedCount = @event.ReservedCount,
             AvailableCount = @event.AvailableCapacity(),
             IsOpenForSale = @event.IsOpenForSale(),
-            AsOf = _clock.GetUtcNow()
+            AsOf = clock.GetUtcNow()
         };
     }
 }

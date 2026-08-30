@@ -20,21 +20,14 @@ public interface IUserService
 /// Consulta de usuarios. Solo lectura: el alta de usuarios queda fuera del
 /// alcance de la prueba, que parte de codigos de usuario ya conocidos.
 /// </summary>
-public class UserService : IUserService
+public class UserService(IUserRepository users) : IUserService
 {
-    private readonly IUserRepository _users;
-
-    public UserService(IUserRepository users) => _users = users;
-
     public async Task<IReadOnlyList<UserDto>> GetAllAsync(CancellationToken ct = default)
-    {
-        var users = await _users.GetAllAsync(ct);
-        return users.Select(Map).ToList();
-    }
+        => (await users.GetAllAsync(ct)).Select(Map).ToList();
 
     public async Task<UserDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var user = await _users.GetByIdAsync(id, ct);
+        var user = await users.GetByIdAsync(id, ct);
         return user is null ? null : Map(user);
     }
 

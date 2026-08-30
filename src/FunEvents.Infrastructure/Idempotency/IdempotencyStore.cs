@@ -8,22 +8,13 @@ namespace FunEvents.Infrastructure.Idempotency;
 /// <summary>
 /// Implementacion de <see cref="IIdempotencyStore"/> sobre PostgreSQL.
 /// </summary>
-public sealed class IdempotencyStore : IIdempotencyStore
+public sealed class IdempotencyStore(AppDbContext db, ILogger<IdempotencyStore> logger) : IIdempotencyStore
 {
-    private readonly AppDbContext _db;
-    private readonly ILogger<IdempotencyStore> _logger;
-
-    public IdempotencyStore(AppDbContext db, ILogger<IdempotencyStore> logger)
-    {
-        _db = db;
-        _logger = logger;
-    }
-
     public async Task<IdempotencyRecord?> GetAsync(string key, CancellationToken ct = default)
     {
         // AsNoTracking: es una lectura de consulta, no queremos que la entidad
         // quede adherida al change tracker del scope de la peticion.
-        var entity = await _db.IdempotencyKeys
+        var entity = await db.IdempotencyKeys
             .AsNoTracking()
             .FirstOrDefaultAsync(ik => ik.Key == key, ct);
 
@@ -40,11 +31,11 @@ public sealed class IdempotencyStore : IIdempotencyStore
             CompletedAt = null
         };
 
-        _db.IdempotencyKeys.Add(entity);
+        db.IdempotencyKeys.Add(entity);
 
         try
         {
-            await _db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
             return true;
         }
         catch (DbUpdateException)
@@ -56,7 +47,7 @@ public sealed class IdempotencyStore : IIdempotencyStore
             // INSERT duplicado y haria fallar una operacion que no tiene nada
             // que ver. La version anterior se tragaba la excepcion y dejaba el
             // contexto envenenado.
-            _db.Entry(entity).State = EntityState.Detached;
+            db.Entry(entity).State = EntityState.Detached;
             return false;
         }
     }
@@ -64,10 +55,10 @@ public sealed class IdempotencyStore : IIdempotencyStore
     public async Task CompleteAsync(string key, Guid reservationId, int statusCode, string responseBody,
         CancellationToken ct = default)
     {
-        var entity = await _db.IdempotencyKeys.FirstOrDefaultAsync(ik => ik.Key == key, ct);
+        var entity = await db.IdempotencyKeys.FirstOrDefaultAsync(ik => ik.Key == key, ct);
         if (entity is null)
         {
-            _logger.LogWarning("Idempotency key {Key} disappeared before completion", key);
+            logger.LogWarning("Idempotency key {Key} disappeared before completion", key);
             return;
         }
 
@@ -76,7 +67,7 @@ public sealed class IdempotencyStore : IIdempotencyStore
         entity.ResponseBody = responseBody;
         entity.CompletedAt = DateTimeOffset.UtcNow;
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task ReleaseAsync(string key, CancellationToken ct = default)
@@ -84,16 +75,16 @@ public sealed class IdempotencyStore : IIdempotencyStore
         // ExecuteDelete: sentencia unica, sin cargar la entidad ni depender del
         // change tracker (que puede estar en un estado sucio tras el fallo que
         // nos trajo hasta aqui).
-        var deleted = await _db.IdempotencyKeys
+        var deleted = await db.IdempotencyKeys
             .Where(ik => ik.Key == key && ik.CompletedAt == null)
             .ExecuteDeleteAsync(ct);
 
         if (deleted > 0)
-            _logger.LogInformation("Released idempotency key {Key} after a failed attempt", key);
+            logger.LogInformation("Released idempotency key {Key} after a failed attempt", key);
     }
 
     public async Task<int> PurgeOlderThanAsync(DateTimeOffset olderThan, CancellationToken ct = default)
-        => await _db.IdempotencyKeys
+        => await db.IdempotencyKeys
             .Where(ik => ik.CreatedAt < olderThan)
             .ExecuteDeleteAsync(ct);
 

@@ -3,18 +3,14 @@ using FunEvents.Domain.Interfaces;
 
 namespace FunEvents.Application.Events;
 
-public class EventService : IEventService
+public class EventService(IEventRepository events) : IEventService
 {
     private const int DefaultPageSize = 20;
     private const int MaxPageSize = 100;
 
-    private readonly IEventRepository _events;
-
-    public EventService(IEventRepository events) => _events = events;
-
     public async Task<EventDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var @event = await _events.GetByIdAsync(id, ct);
+        var @event = await events.GetByIdAsync(id, ct);
         return @event is null ? null : MapToDto(@event);
     }
 
@@ -27,7 +23,7 @@ public class EventService : IEventService
         if (page < 1) page = 1;
         if (pageSize < 1 || pageSize > MaxPageSize) pageSize = DefaultPageSize;
 
-        var (items, totalCount) = await _events.GetPagedAsync(page, pageSize, search, ct: ct);
+        var (items, totalCount) = await events.GetPagedAsync(page, pageSize, search, ct: ct);
 
         return new PagedResponse<EventDto>
         {

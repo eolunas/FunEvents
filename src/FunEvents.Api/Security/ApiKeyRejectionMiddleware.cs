@@ -21,20 +21,12 @@ namespace FunEvents.Api.Security;
 /// legitimo cuyo identificador todavia no conocemos.
 /// </para>
 /// </remarks>
-public class ApiKeyRejectionMiddleware
+public class ApiKeyRejectionMiddleware(RequestDelegate next, IOptions<SecurityOptions> security)
 {
-    private readonly RequestDelegate _next;
-    private readonly string _headerName;
-
-    public ApiKeyRejectionMiddleware(RequestDelegate next, IOptions<SecurityOptions> security)
-    {
-        _next = next;
-        _headerName = security.Value.ApiKey.HeaderName;
-    }
-
     public async Task InvokeAsync(HttpContext context)
     {
-        var presented = context.Request.Headers.ContainsKey(_headerName);
+        var headerName = security.Value.ApiKey.HeaderName;
+        var presented = context.Request.Headers.ContainsKey(headerName);
 
         if (presented && !context.User.IsPartner())
         {
@@ -42,14 +34,14 @@ public class ApiKeyRejectionMiddleware
                 context,
                 StatusCodes.Status401Unauthorized,
                 "Invalid API key",
-                $"The {_headerName} header does not match any active partner.",
+                $"The {headerName} header does not match any active partner.",
                 SecurityErrorCodes.InvalidApiKey,
                 context.RequestAborted);
 
             return;
         }
 
-        await _next(context);
+        await next(context);
     }
 }
 

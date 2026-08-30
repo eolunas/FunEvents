@@ -4,12 +4,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FunEvents.Infrastructure.Data.Repositories;
 
-public class EventRepository : IEventRepository
+public class EventRepository(AppDbContext db) : IEventRepository
 {
-    private readonly AppDbContext _db;
-
-    public EventRepository(AppDbContext db) => _db = db;
-
     /// <remarks>
     /// AsNoTracking deliberado. El aforo NUNCA se modifica cargando la entidad
     /// y guardando (eso reintroduciria la carrera lectura-escritura que el
@@ -18,12 +14,12 @@ public class EventRepository : IEventRepository
     /// <see cref="TryReserveCapacityAsync"/>.
     /// </remarks>
     public async Task<Event?> GetByIdAsync(Guid id, CancellationToken ct = default)
-        => await _db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
+        => await db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
 
     public async Task<(IReadOnlyList<Event> Items, int TotalCount)> GetPagedAsync(
         int page, int pageSize, string? search = null, Guid? partnerId = null, CancellationToken ct = default)
     {
-        var query = _db.Events.AsNoTracking().Where(e => e.State == EventState.Published);
+        var query = db.Events.AsNoTracking().Where(e => e.State == EventState.Published);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -50,7 +46,7 @@ public class EventRepository : IEventRepository
     }
 
     public async Task AddAsync(Event @event, CancellationToken ct = default)
-        => await _db.Events.AddAsync(@event, ct);
+        => await db.Events.AddAsync(@event, ct);
 
     /// <inheritdoc/>
     public async Task<bool> TryReserveCapacityAsync(Guid eventId, int quantity, CancellationToken ct = default)
@@ -65,7 +61,7 @@ public class EventRepository : IEventRepository
         // ventana en la que otra transaccion pueda colarse. 0 filas afectadas
         // significa "no cabia", y es la unica respuesta posible: nunca puede
         // producir sobreventa.
-        var rowsAffected = await _db.Events
+        var rowsAffected = await db.Events
             .Where(e => e.Id == eventId
                         && e.State == EventState.Published
                         && e.Capacity - e.ReservedCount >= quantity)
@@ -82,7 +78,7 @@ public class EventRepository : IEventRepository
         // La guarda ReservedCount >= quantity evita que un doble procesamiento
         // deje el contador en negativo. Antes no existia: la caducidad podia
         // restar por debajo de cero y "crear" aforo inexistente.
-        var rowsAffected = await _db.Events
+        var rowsAffected = await db.Events
             .Where(e => e.Id == eventId && e.ReservedCount >= quantity)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(e => e.ReservedCount, e => e.ReservedCount - quantity)

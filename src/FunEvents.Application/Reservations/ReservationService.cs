@@ -44,38 +44,17 @@ namespace FunEvents.Application.Reservations;
 /// ReservationId aleatorio que no existia en la base de datos.
 /// </para>
 /// </remarks>
-public class ReservationService : IReservationService
+public class ReservationService(
+    IEventRepository events,
+    IReservationRepository reservations,
+    IUserRepository users,
+    IIdempotencyStore idempotency,
+    IUnitOfWork unitOfWork,
+    IOptions<ReservationPolicyOptions> policy,
+    ILogger<ReservationService> logger,
+    TimeProvider clock) : IReservationService
 {
     private static readonly JsonSerializerOptions ReplayJsonOptions = new(JsonSerializerDefaults.Web);
-
-    private readonly IEventRepository _events;
-    private readonly IReservationRepository _reservations;
-    private readonly IUserRepository _users;
-    private readonly IIdempotencyStore _idempotency;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly ReservationPolicyOptions _policy;
-    private readonly ILogger<ReservationService> _logger;
-    private readonly TimeProvider _clock;
-
-    public ReservationService(
-        IEventRepository events,
-        IReservationRepository reservations,
-        IUserRepository users,
-        IIdempotencyStore idempotency,
-        IUnitOfWork unitOfWork,
-        IOptions<ReservationPolicyOptions> policy,
-        ILogger<ReservationService> logger,
-        TimeProvider clock)
-    {
-        _events = events;
-        _reservations = reservations;
-        _users = users;
-        _idempotency = idempotency;
-        _unitOfWork = unitOfWork;
-        _policy = policy.Value;
-        _logger = logger;
-        _clock = clock;
-    }
 
     public async Task<CreateReservationResult> CreateAsync(
         CreateReservationRequest request, string idempotencyKey, CancellationToken ct = default)
@@ -84,12 +63,12 @@ public class ReservationService : IReservationService
             request.EventId, request.UserId, request.TicketQuantity, request.Channel, request.PartnerId);
 
         // ---- Fase 1: reproduccion ----
-        var known = await _idempotency.GetAsync(idempotencyKey, ct);
+        var known = await idempotency.GetAsync(idempotencyKey, ct);
         if (known is not null)
             return await ResolveKnownKeyAsync(known, idempotencyKey, fingerprint, ct);
 
         // ---- Fase 2: exclusion mutua ----
-        if (!await _idempotency.TryBeginAsync(idempotencyKey, fingerprint, ct))
+        if (!await idempotency.TryBeginAsync(idempotencyKey, fingerprint, ct))
         {
             var settled = await WaitForCompletionAsync(idempotencyKey, ct);
 
@@ -104,7 +83,7 @@ public class ReservationService : IReservationService
         // ---- Fase 3: trabajo real ----
         try
         {
-            return await _unitOfWork.ExecuteInTransactionAsync<CreateReservationResult>(
+            return await unitOfWork.ExecuteInTransactionAsync<CreateReservationResult>(
                 token => ReserveAsync(request, idempotencyKey, token), ct);
         }
         catch
@@ -115,18 +94,18 @@ public class ReservationService : IReservationService
             //
             // CancellationToken.None a proposito: liberar la key debe ocurrir
             // incluso si el fallo fue precisamente una cancelacion.
-            await _idempotency.ReleaseAsync(idempotencyKey, CancellationToken.None);
+            await idempotency.ReleaseAsync(idempotencyKey, CancellationToken.None);
             throw;
         }
     }
 
     public async Task<ReservationResponse?> GetByIdAsync(Guid reservationId, CancellationToken ct = default)
     {
-        var reservation = await _reservations.GetByIdAsync(reservationId, ct);
+        var reservation = await reservations.GetByIdAsync(reservationId, ct);
         if (reservation is null) return null;
 
-        var @event = await _events.GetByIdAsync(reservation.EventId, ct);
-        var user = await _users.GetByIdAsync(reservation.UserId, ct);
+        var @event = await events.GetByIdAsync(reservation.EventId, ct);
+        var user = await users.GetByIdAsync(reservation.UserId, ct);
 
         return Map(reservation, @event, user, previouslyCreated: false);
     }
@@ -145,11 +124,11 @@ public class ReservationService : IReservationService
     /// </remarks>
     public async Task<ReservationUrlResponse?> GetUrlByIdAsync(Guid reservationId, CancellationToken ct = default)
     {
-        var reservation = await _reservations.GetByIdAsync(reservationId, ct);
+        var reservation = await reservations.GetByIdAsync(reservationId, ct);
         if (reservation is null) return null;
 
         var channel = Uri.EscapeDataString(reservation.Channel.ToString());
-        var url = $"{_policy.ReservationUrlBase.TrimEnd('/')}/{channel}/{reservation.Id}";
+        var url = $"{policy.Value.ReservationUrlBase.TrimEnd('/')}/{channel}/{reservation.Id}";
 
         return new ReservationUrlResponse
         {
@@ -164,7 +143,7 @@ public class ReservationService : IReservationService
     private async Task<CreateReservationResult> ReserveAsync(
         CreateReservationRequest request, string idempotencyKey, CancellationToken ct)
     {
-        var user = await _users.GetByIdAsync(request.UserId, ct)
+        var user = await users.GetByIdAsync(request.UserId, ct)
                    ?? throw new DomainException(
                        $"User {request.UserId} not found.", ReservationErrors.UserNotFound);
 
@@ -172,7 +151,7 @@ public class ReservationService : IReservationService
             throw new DomainException(
                 $"User {request.UserId} is not active.", ReservationErrors.UserInactive);
 
-        var @event = await _events.GetByIdAsync(request.EventId, ct)
+        var @event = await events.GetByIdAsync(request.EventId, ct)
                      ?? throw new DomainException(
                          $"Event {request.EventId} not found.", ReservationErrors.EventNotFound);
 
@@ -186,7 +165,7 @@ public class ReservationService : IReservationService
         // Punto critico de concurrencia: comprobar y consumir el aforo en una
         // sola sentencia. Si devuelve false, otro comprador se llevo las plazas
         // entre esta peticion y la anterior.
-        var reserved = await _events.TryReserveCapacityAsync(
+        var reserved = await events.TryReserveCapacityAsync(
             request.EventId, request.TicketQuantity, ct);
 
         if (!reserved)
@@ -198,26 +177,26 @@ public class ReservationService : IReservationService
             eventId: request.EventId,
             userId: request.UserId,
             ticketQuantity: request.TicketQuantity,
-            expiresAt: _clock.GetUtcNow().Add(_policy.HoldWindow),
+            expiresAt: clock.GetUtcNow().Add(policy.Value.HoldWindow),
             channel: request.Channel,
             partnerId: request.PartnerId);
 
-        await _reservations.AddAsync(reservation, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        await reservations.AddAsync(reservation, ct);
+        await unitOfWork.SaveChangesAsync(ct);
 
         var response = Map(reservation, @event, user, previouslyCreated: false);
 
         // Se guarda la respuesta EXACTA dentro de la misma transaccion: si el
         // commit no llega, no queda rastro de la key y el reintento del cliente
         // se procesa desde cero.
-        await _idempotency.CompleteAsync(
+        await idempotency.CompleteAsync(
             idempotencyKey,
             reservation.Id,
             statusCode: 201,
             responseBody: JsonSerializer.Serialize(response, ReplayJsonOptions),
             ct);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Reservation {ReservationId} created: {Quantity} ticket(s) for event {EventId} " +
             "by user {UserId} via {Channel}, expires at {ExpiresAt:u}",
             reservation.Id, reservation.TicketQuantity, reservation.EventId,
@@ -228,10 +207,10 @@ public class ReservationService : IReservationService
 
     private async Task EnforcePerUserLimitAsync(CreateReservationRequest request, CancellationToken ct)
     {
-        var limit = _policy.MaxTicketsPerUserPerEvent;
+        var limit = policy.Value.MaxTicketsPerUserPerEvent;
         if (limit <= 0) return;
 
-        var alreadyHeld = await _reservations.CountActiveTicketsAsync(
+        var alreadyHeld = await reservations.CountActiveTicketsAsync(
             request.UserId, request.EventId, ct);
 
         if (alreadyHeld + request.TicketQuantity <= limit) return;
@@ -254,13 +233,13 @@ public class ReservationService : IReservationService
     /// </summary>
     private async Task<IdempotencyRecord?> WaitForCompletionAsync(string key, CancellationToken ct)
     {
-        var deadline = _clock.GetUtcNow() + _policy.IdempotencyWaitTimeout;
+        var deadline = clock.GetUtcNow() + policy.Value.IdempotencyWaitTimeout;
 
-        while (_clock.GetUtcNow() < deadline)
+        while (clock.GetUtcNow() < deadline)
         {
-            await Task.Delay(_policy.IdempotencyPollInterval, ct);
+            await Task.Delay(policy.Value.IdempotencyPollInterval, ct);
 
-            var record = await _idempotency.GetAsync(key, ct);
+            var record = await idempotency.GetAsync(key, ct);
 
             // Desaparecio: la peticion ganadora fallo y libero la key.
             // Que el cliente reintente; no adivinamos por el.
@@ -269,7 +248,7 @@ public class ReservationService : IReservationService
             if (record.IsCompleted) return record;
         }
 
-        _logger.LogWarning(
+        logger.LogWarning(
             "Timed out waiting for in-flight request with Idempotency-Key {Key}", key);
         return null;
     }
@@ -301,7 +280,7 @@ public class ReservationService : IReservationService
             if (current is not null)
                 return new CreateReservationResult(current with { PreviouslyCreated = true }, Replayed: true);
 
-            _logger.LogError(
+            logger.LogError(
                 "Idempotency key {Key} points to reservation {ReservationId}, which no longer exists",
                 key, reservationId);
         }

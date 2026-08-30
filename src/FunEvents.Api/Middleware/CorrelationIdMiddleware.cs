@@ -12,14 +12,10 @@ namespace FunEvents.Api.Middleware;
 /// comparten el mismo identificador. Es lo que permite reconstruir que paso en
 /// una reserva concreta cuando un colaborador reporta una incidencia.
 /// </remarks>
-public class CorrelationIdMiddleware
+public class CorrelationIdMiddleware(RequestDelegate next)
 {
     public const string HeaderName = "X-Correlation-Id";
     public const string ItemKey = "CorrelationId";
-
-    private readonly RequestDelegate _next;
-
-    public CorrelationIdMiddleware(RequestDelegate next) => _next = next;
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -40,7 +36,7 @@ public class CorrelationIdMiddleware
 
         using (LogContext.PushProperty(ItemKey, correlationId))
         {
-            await _next(context);
+            await next(context);
         }
     }
 }

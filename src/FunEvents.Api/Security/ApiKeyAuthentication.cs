@@ -50,26 +50,17 @@ public class ApiKeySchemeOptions : AuthenticationSchemeOptions
 /// registra, se hace con los primeros caracteres del hash, nunca con la clave.
 /// </para>
 /// </remarks>
-public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeySchemeOptions>
+public class ApiKeyAuthenticationHandler(
+    IOptionsMonitor<ApiKeySchemeOptions> options,
+    ILoggerFactory logger,
+    UrlEncoder encoder,
+    IMemoryCache cache,
+    IOptions<SecurityOptions> security)
+    : AuthenticationHandler<ApiKeySchemeOptions>(options, logger, encoder)
 {
-    private readonly IMemoryCache _cache;
-    private readonly SecurityOptions _security;
-
-    public ApiKeyAuthenticationHandler(
-        IOptionsMonitor<ApiKeySchemeOptions> options,
-        ILoggerFactory logger,
-        UrlEncoder encoder,
-        IMemoryCache cache,
-        IOptions<SecurityOptions> security)
-        : base(options, logger, encoder)
-    {
-        _cache = cache;
-        _security = security.Value;
-    }
-
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var headerName = _security.ApiKey.HeaderName;
+        var headerName = security.Value.ApiKey.HeaderName;
 
         if (!Request.Headers.TryGetValue(headerName, out var values))
             return AuthenticateResult.NoResult();
@@ -118,7 +109,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeySchemeOpt
     {
         var cacheKey = $"apikey:{hash}";
 
-        if (_cache.TryGetValue<Partner>(cacheKey, out var cached))
+        if (cache.TryGetValue<Partner>(cacheKey, out var cached))
             return cached;
 
         var repository = Context.RequestServices.GetRequiredService<IPartnerRepository>();
@@ -128,12 +119,12 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeySchemeOpt
         // sin esto, un cliente mal configurado que reintenta en bucle con una
         // clave invalida genera una consulta a la base de datos por peticion,
         // que es un vector de denegacion de servicio barato.
-        _cache.Set(
+        cache.Set(
             cacheKey,
             partner,
             partner is null
                 ? TimeSpan.FromSeconds(5)
-                : _security.ApiKey.CacheDuration);
+                : security.Value.ApiKey.CacheDuration);
 
         return partner;
     }

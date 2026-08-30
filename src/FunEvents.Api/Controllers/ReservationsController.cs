@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using FunEvents.Api.Errors;
 using FunEvents.Api.Security;
 using FunEvents.Application.Reservations;
 using FunEvents.Application.Reservations.Dtos;
@@ -28,15 +27,9 @@ namespace FunEvents.Api.Controllers;
 /// la vez la identidad y el canal.
 /// </para>
 /// </remarks>
-[ApiController]
 [Route("api/v1/reservations")]
-[Produces("application/json")]
-public class ReservationsController : ControllerBase
+public class ReservationsController(IReservationService reservations) : ApiControllerBase
 {
-    private readonly IReservationService _reservations;
-
-    public ReservationsController(IReservationService reservations) => _reservations = reservations;
-
     /// <summary>Reserva entradas de un evento para un usuario.</summary>
     /// <param name="idempotencyKey">
     /// Identificador unico de intento, generado por el cliente. Reintentar con
@@ -67,7 +60,7 @@ public class ReservationsController : ControllerBase
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(idempotencyKey))
-            return ProblemResult(
+            return Problem(
                 StatusCodes.Status400BadRequest,
                 "Missing Idempotency-Key header",
                 "POST /api/v1/reservations requires a client-generated Idempotency-Key header.",
@@ -78,14 +71,14 @@ public class ReservationsController : ControllerBase
         if (request.Channel == SalesChannel.Partner)
         {
             if (!User.IsPartner())
-                return ProblemResult(
+                return Problem(
                     StatusCodes.Status401Unauthorized,
                     "API key required",
                     "Reservations on the Partner channel require a valid X-Api-Key header.",
                     SecurityErrorCodes.ApiKeyRequired);
 
             if (!User.HasScope(ApiScopes.ReservationsCreate))
-                return ProblemResult(
+                return Problem(
                     StatusCodes.Status403Forbidden,
                     "Insufficient scope",
                     $"This API key does not grant the '{ApiScopes.ReservationsCreate}' scope.",
@@ -97,13 +90,15 @@ public class ReservationsController : ControllerBase
             effective = request with { PartnerId = User.GetPartnerId() };
         }
 
-        var (reservation, replayed) = await _reservations.CreateAsync(effective, idempotencyKey, ct);
+        var (reservation, replayed) = await reservations.CreateAsync(effective, idempotencyKey, ct);
 
         // 200 en la reproduccion y 201 solo en la creacion real: el codigo de
         // estado le dice al cliente si su reintento provoco algo nuevo.
-        return replayed
-            ? Ok(reservation)
-            : CreatedAtAction(nameof(GetById), new { reservationId = reservation.ReservationId }, reservation);
+        return RespondCreatedOrOk(
+            created: !replayed,
+            actionName: nameof(GetById),
+            routeValues: new { reservationId = reservation.ReservationId },
+            value: reservation);
     }
 
     /// <summary>Consulta una reserva por su identificador.</summary>
@@ -120,53 +115,30 @@ public class ReservationsController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ReservationResponse>> GetById(Guid reservationId, CancellationToken ct)
     {
-        var reservation = await _reservations.GetByIdAsync(reservationId, ct);
+        var reservation = await reservations.GetByIdAsync(reservationId, ct);
 
-        if (reservation is null || !IsVisibleToCaller(reservation))
-            return ProblemResult(
-                StatusCodes.Status404NotFound,
-                "Reservation not found",
-                $"Reservation {reservationId} does not exist.",
-                "RESERVATION_NOT_FOUND");
-
-        return Ok(reservation);
+        return Respond(
+            reservation, "Reservation", reservationId, "RESERVATION_NOT_FOUND",
+            visible: reservation is not null && IsVisibleToCaller(reservation.PartnerId));
     }
 
-    /// <summary>Consulta Url de una reserva.</summary>
+    /// <summary>Consulta la URL de una reserva.</summary>
     /// <remarks>
-    /// <b>Aislamiento entre colaboradores.</b> Si quien pregunta es un
-    /// colaborador y la reserva no es suya, la respuesta es <c>404</c> y no
-    /// <c>403</c>. Un 403 confirmaria que ese identificador existe, y la
-    /// existencia de una reserva ajena ya es informacion que no le corresponde:
-    /// con suficientes intentos, un 403 permite estimar el volumen de negocio
-    /// de la competencia.
+    /// <b>Aislamiento entre colaboradores.</b> Mismo criterio que
+    /// <see cref="GetById"/>: 404, nunca 403, si la reserva no pertenece a
+    /// quien pregunta.
     /// </remarks>
     [HttpGet("url/{reservationId:guid}", Name = nameof(GetURLById))]
     [ProducesResponseType(typeof(ReservationUrlResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ReservationUrlResponse>> GetURLById(Guid reservationId, CancellationToken ct)
     {
-        var reservationUrl = await _reservations.GetUrlByIdAsync(reservationId, ct);
+        var reservationUrl = await reservations.GetUrlByIdAsync(reservationId, ct);
 
-        if (reservationUrl is null || !IsVisibleToCaller(reservationUrl.PartnerId))
-            return ProblemResult(
-                StatusCodes.Status404NotFound,
-                "Reservation not found",
-                $"Reservation {reservationId} does not exist.",
-                "RESERVATION_NOT_FOUND");
-
-        return Ok(reservationUrl);
+        return Respond(
+            reservationUrl, "Reservation", reservationId, "RESERVATION_NOT_FOUND",
+            visible: reservationUrl is not null && IsVisibleToCaller(reservationUrl.PartnerId));
     }
 
-    private bool IsVisibleToCaller(ReservationResponse reservation) => IsVisibleToCaller(reservation.PartnerId);
-
-    private bool IsVisibleToCaller(Guid? partnerId)
-        => !User.IsPartner() || partnerId == User.GetPartnerId();
-
-    private ObjectResult ProblemResult(int status, string title, string detail, string errorCode)
-        => new(ApiProblem.Create(HttpContext, status, title, detail, errorCode))
-        {
-            StatusCode = status,
-            ContentTypes = { "application/problem+json" }
-        };
+    private bool IsVisibleToCaller(Guid? partnerId) => !User.IsPartner() || partnerId == User.GetPartnerId();
 }

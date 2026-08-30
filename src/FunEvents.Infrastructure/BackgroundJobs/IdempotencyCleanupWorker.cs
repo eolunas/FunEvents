@@ -26,42 +26,31 @@ public sealed class IdempotencyCleanupOptions
 /// jamas borrada. Se implementa en vez de retirar la afirmacion del documento,
 /// porque el coste es bajo y la necesidad es real.
 /// </remarks>
-public class IdempotencyCleanupWorker : BackgroundService
+public class IdempotencyCleanupWorker(
+    IServiceScopeFactory scopeFactory,
+    ILogger<IdempotencyCleanupWorker> logger,
+    IOptions<IdempotencyCleanupOptions> options) : BackgroundService
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<IdempotencyCleanupWorker> _logger;
-    private readonly IdempotencyCleanupOptions _options;
-
-    public IdempotencyCleanupWorker(
-        IServiceScopeFactory scopeFactory,
-        ILogger<IdempotencyCleanupWorker> logger,
-        IOptions<IdempotencyCleanupOptions> options)
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _options = options.Value;
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation(
+        logger.LogInformation(
             "IdempotencyCleanupWorker started (retention {Retention}h, interval {Interval}h)",
-            _options.Retention.TotalHours, _options.PollingInterval.TotalHours);
+            options.Value.Retention.TotalHours, options.Value.PollingInterval.TotalHours);
 
-        using var timer = new PeriodicTimer(_options.PollingInterval);
+        using var timer = new PeriodicTimer(options.Value.PollingInterval);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                using var scope = _scopeFactory.CreateScope();
+                using var scope = scopeFactory.CreateScope();
                 var store = scope.ServiceProvider.GetRequiredService<IIdempotencyStore>();
 
-                var cutoff = DateTimeOffset.UtcNow - _options.Retention;
+                var cutoff = DateTimeOffset.UtcNow - options.Value.Retention;
                 var purged = await store.PurgeOlderThanAsync(cutoff, stoppingToken);
 
                 if (purged > 0)
-                    _logger.LogInformation("Purged {Count} idempotency key(s) older than {Cutoff:u}",
+                    logger.LogInformation("Purged {Count} idempotency key(s) older than {Cutoff:u}",
                         purged, cutoff);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -70,7 +59,7 @@ public class IdempotencyCleanupWorker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error purging idempotency keys");
+                logger.LogError(ex, "Error purging idempotency keys");
             }
 
             try
@@ -83,6 +72,6 @@ public class IdempotencyCleanupWorker : BackgroundService
             }
         }
 
-        _logger.LogInformation("IdempotencyCleanupWorker stopped");
+        logger.LogInformation("IdempotencyCleanupWorker stopped");
     }
 }

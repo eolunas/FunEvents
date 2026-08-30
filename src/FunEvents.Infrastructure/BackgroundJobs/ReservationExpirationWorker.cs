@@ -29,29 +29,18 @@ public sealed class ReservationExpirationOptions
 /// Reserved y la siguiente pasada las vuelve a tomar.
 /// </para>
 /// </remarks>
-public class ReservationExpirationWorker : BackgroundService
+public class ReservationExpirationWorker(
+    IServiceScopeFactory scopeFactory,
+    ILogger<ReservationExpirationWorker> logger,
+    IOptions<ReservationExpirationOptions> options) : BackgroundService
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<ReservationExpirationWorker> _logger;
-    private readonly ReservationExpirationOptions _options;
-
-    public ReservationExpirationWorker(
-        IServiceScopeFactory scopeFactory,
-        ILogger<ReservationExpirationWorker> logger,
-        IOptions<ReservationExpirationOptions> options)
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _options = options.Value;
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation(
+        logger.LogInformation(
             "ReservationExpirationWorker started (interval {Interval}s, batch {BatchSize})",
-            _options.PollingInterval.TotalSeconds, _options.BatchSize);
+            options.Value.PollingInterval.TotalSeconds, options.Value.BatchSize);
 
-        using var timer = new PeriodicTimer(_options.PollingInterval);
+        using var timer = new PeriodicTimer(options.Value.PollingInterval);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -59,7 +48,7 @@ public class ReservationExpirationWorker : BackgroundService
             {
                 var released = await ProcessBatchAsync(stoppingToken);
                 if (released > 0)
-                    _logger.LogInformation("Expired {Count} reservation(s)", released);
+                    logger.LogInformation("Expired {Count} reservation(s)", released);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -69,7 +58,7 @@ public class ReservationExpirationWorker : BackgroundService
             {
                 // Un fallo puntual (base de datos reiniciandose, deadlock) no debe
                 // tumbar el worker: se registra y se reintenta en el siguiente tick.
-                _logger.LogError(ex, "Error processing reservation expirations");
+                logger.LogError(ex, "Error processing reservation expirations");
             }
 
             try
@@ -82,21 +71,21 @@ public class ReservationExpirationWorker : BackgroundService
             }
         }
 
-        _logger.LogInformation("ReservationExpirationWorker stopped");
+        logger.LogInformation("ReservationExpirationWorker stopped");
     }
 
     private async Task<int> ProcessBatchAsync(CancellationToken ct)
     {
         // Un scope nuevo por pasada: el DbContext es scoped y no debe compartirse
         // entre iteraciones de un servicio singleton.
-        using var scope = _scopeFactory.CreateScope();
+        using var scope = scopeFactory.CreateScope();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
         var reservations = scope.ServiceProvider.GetRequiredService<IReservationRepository>();
         var events = scope.ServiceProvider.GetRequiredService<IEventRepository>();
 
         return await unitOfWork.ExecuteInTransactionAsync<int>(async token =>
         {
-            var expired = await reservations.ClaimExpiredAsync(_options.BatchSize, token);
+            var expired = await reservations.ClaimExpiredAsync(options.Value.BatchSize, token);
             if (expired.Count == 0) return 0;
 
             foreach (var reservation in expired)
@@ -111,13 +100,13 @@ public class ReservationExpirationWorker : BackgroundService
                     // No deberia ocurrir: significaria que el contador del evento
                     // esta por debajo de lo que esta reserva retiene. Se registra
                     // en vez de silenciarlo, porque indica corrupcion de datos.
-                    _logger.LogError(
+                    logger.LogError(
                         "Could not release {Quantity} ticket(s) for event {EventId} " +
                         "while expiring reservation {ReservationId}: counter is inconsistent",
                         reservation.TicketQuantity, reservation.EventId, reservation.Id);
                 }
 
-                _logger.LogDebug("Expired reservation {ReservationId} ({Quantity} tickets)",
+                logger.LogDebug("Expired reservation {ReservationId} ({Quantity} tickets)",
                     reservation.Id, reservation.TicketQuantity);
             }
 

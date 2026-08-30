@@ -4,13 +4,9 @@ using Microsoft.EntityFrameworkCore;
 namespace FunEvents.Infrastructure.Data;
 
 /// <inheritdoc cref="IUnitOfWork"/>
-public sealed class UnitOfWork : IUnitOfWork
+public sealed class UnitOfWork(AppDbContext db) : IUnitOfWork
 {
-    private readonly AppDbContext _db;
-
-    public UnitOfWork(AppDbContext db) => _db = db;
-
-    public Task<int> SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
+    public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 
     public async Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<CancellationToken, Task<TResult>> operation, CancellationToken ct = default)
@@ -18,7 +14,7 @@ public sealed class UnitOfWork : IUnitOfWork
         // Si ya hay una transaccion abierta (por ejemplo, un caso de uso que
         // compone a otro), nos unimos a ella en lugar de anidar. PostgreSQL no
         // tiene transacciones anidadas reales y abrir una segunda lanzaria.
-        if (_db.Database.CurrentTransaction is not null)
+        if (db.Database.CurrentTransaction is not null)
             return await operation(ct);
 
         // CreateExecutionStrategy es obligatorio aqui, no opcional:
@@ -28,7 +24,7 @@ public sealed class UnitOfWork : IUnitOfWork
         // transactions"). Con la politica de reintentos desactivada devuelve
         // una estrategia de paso directo, asi que este codigo es correcto en
         // ambas configuraciones.
-        var strategy = _db.Database.CreateExecutionStrategy();
+        var strategy = db.Database.CreateExecutionStrategy();
 
         // El argumento generico va explicito: una lambda async encaja tanto en
         // la sobrecarga Func<CancellationToken, Task> como en la
@@ -36,7 +32,7 @@ public sealed class UnitOfWork : IUnitOfWork
         // sobrecarga es ambigua.
         return await strategy.ExecuteAsync<TResult>(async token =>
         {
-            await using var transaction = await _db.Database.BeginTransactionAsync(token);
+            await using var transaction = await db.Database.BeginTransactionAsync(token);
             try
             {
                 var result = await operation(token);

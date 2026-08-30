@@ -12,20 +12,9 @@ namespace FunEvents.Api.Controllers;
 /// obligaba a dos clases con la misma <c>[Route("api/v1/events")]</c>, algo que
 /// funciona pero desconcierta a quien busca donde esta definida una ruta.
 /// </remarks>
-[ApiController]
 [Route("api/v1/events")]
-[Produces("application/json")]
-public class EventsController : ControllerBase
+public class EventsController(IEventService events, IAvailabilityService availability) : ApiControllerBase
 {
-    private readonly IEventService _events;
-    private readonly IAvailabilityService _availability;
-
-    public EventsController(IEventService events, IAvailabilityService availability)
-    {
-        _events = events;
-        _availability = availability;
-    }
-
     /// <summary>Lista los eventos publicados, paginados.</summary>
     /// <param name="page">Pagina, empezando en 1.</param>
     /// <param name="pageSize">Tamano de pagina (maximo 100).</param>
@@ -37,17 +26,14 @@ public class EventsController : ControllerBase
         [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
         CancellationToken ct = default)
-        => Ok(await _events.GetPagedAsync(page, pageSize, search, ct));
+        => Ok(await events.GetPagedAsync(page, pageSize, search, ct));
 
     /// <summary>Detalle de un evento.</summary>
     [HttpGet("{eventId:guid}")]
     [ProducesResponseType(typeof(EventDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<EventDto>> GetById(Guid eventId, CancellationToken ct)
-    {
-        var @event = await _events.GetByIdAsync(eventId, ct);
-        return @event is null ? EventNotFound(eventId) : Ok(@event);
-    }
+        => Respond(await events.GetByIdAsync(eventId, ct), "Event", eventId, "EVENT_NOT_FOUND");
 
     /// <summary>Disponibilidad actual de un evento.</summary>
     /// <remarks>
@@ -61,17 +47,5 @@ public class EventsController : ControllerBase
     [ProducesResponseType(typeof(AvailabilityResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AvailabilityResponse>> GetAvailability(Guid eventId, CancellationToken ct)
-    {
-        var availability = await _availability.GetAvailabilityAsync(eventId, ct);
-        return availability is null ? EventNotFound(eventId) : Ok(availability);
-    }
-
-    private NotFoundObjectResult EventNotFound(Guid eventId) => NotFound(new ProblemDetails
-    {
-        Type = "https://api.funevents.com/errors/event-not-found",
-        Title = "Event not found",
-        Status = StatusCodes.Status404NotFound,
-        Detail = $"Event {eventId} does not exist.",
-        Instance = HttpContext.Request.Path
-    });
+        => Respond(await availability.GetAvailabilityAsync(eventId, ct), "Event", eventId, "EVENT_NOT_FOUND");
 }

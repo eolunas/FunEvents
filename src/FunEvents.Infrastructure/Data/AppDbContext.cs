@@ -7,15 +7,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FunEvents.Infrastructure.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Event> Events => Set<Event>();
     public DbSet<Reservation> Reservations => Set<Reservation>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Partner> Partners => Set<Partner>();
     public DbSet<IdempotencyKey> IdempotencyKeys => Set<IdempotencyKey>();
-
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

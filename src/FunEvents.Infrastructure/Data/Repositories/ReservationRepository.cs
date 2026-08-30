@@ -4,20 +4,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FunEvents.Infrastructure.Data.Repositories;
 
-public class ReservationRepository : IReservationRepository
+public class ReservationRepository(AppDbContext db) : IReservationRepository
 {
-    private readonly AppDbContext _db;
-
-    public ReservationRepository(AppDbContext db) => _db = db;
-
     public async Task<Reservation?> GetByIdAsync(Guid id, CancellationToken ct = default)
-        => await _db.Reservations.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct);
+        => await db.Reservations.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct);
 
     public async Task AddAsync(Reservation reservation, CancellationToken ct = default)
-        => await _db.Reservations.AddAsync(reservation, ct);
+        => await db.Reservations.AddAsync(reservation, ct);
 
     public async Task<int> CountActiveTicketsAsync(Guid userId, Guid eventId, CancellationToken ct = default)
-        => await _db.Reservations
+        => await db.Reservations
             .AsNoTracking()
             .Where(r => r.UserId == userId
                         && r.EventId == eventId
@@ -36,7 +32,7 @@ public class ReservationRepository : IReservationRepository
     /// mantienen hasta el commit.
     /// </remarks>
     public async Task<IReadOnlyList<Reservation>> ClaimExpiredAsync(int batchSize, CancellationToken ct = default)
-        => await _db.Reservations
+        => await db.Reservations
             .FromSql($@"
                 SELECT * FROM ""Reservations""
                 WHERE ""State"" = 'Reserved' AND ""ExpiresAt"" < NOW()
