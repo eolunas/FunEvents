@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 using FunEvents.Api.Security;
 using FunEvents.Application.Reservations;
 using FunEvents.Application.Reservations.Dtos;
-using FunEvents.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FunEvents.Api.Controllers;
@@ -12,20 +11,13 @@ namespace FunEvents.Api.Controllers;
 /// integrarian los colaboradores en su propio portal o POS.
 /// </summary>
 /// <remarks>
-/// <para>
 /// <b>No hay un solo try/catch aqui.</b> Las violaciones de reglas de negocio
-/// viajan como <c>DomainException</c> y las traduce a HTTP un unico manejador
+/// -incluida la autorizacion por canal del canal Partner- viajan como
+/// <c>DomainException</c> y las traduce a HTTP un unico manejador
 /// (<c>DomainExceptionHandler</c> + <c>DomainErrorCatalog</c>). El controlador
 /// se limita a lo que le corresponde: leer la peticion, resolver la identidad
-/// del llamante, delegar y elegir entre 201 y 200.
-/// </para>
-/// <para>
-/// <b>Por que la autorizacion no es un atributo.</b> Que una reserva exija
-/// credencial de colaborador depende del <i>canal</i>, que viaja en el cuerpo,
-/// no de la ruta. Un <c>[Authorize]</c> se evalua antes de enlazar el cuerpo,
-/// asi que la regla se comprueba aqui, en el unico punto donde ya se conocen a
-/// la vez la identidad y el canal.
-/// </para>
+/// del llamante desde el <c>ClaimsPrincipal</c> (algo que el servicio no puede
+/// hacer sin acoplarse a ASP.NET), delegar y elegir entre 201 y 200.
 /// </remarks>
 [Route("api/v1/reservations")]
 public class ReservationsController(IReservationService reservations) : ApiControllerBase
@@ -66,31 +58,10 @@ public class ReservationsController(IReservationService reservations) : ApiContr
                 "POST /api/v1/reservations requires a client-generated Idempotency-Key header.",
                 "MISSING_IDEMPOTENCY_KEY");
 
-        var effective = request;
+        var caller = new ReservationCaller(
+            User.IsPartner(), User.HasScope(ApiScopes.ReservationsCreate), User.GetPartnerId());
 
-        if (request.Channel == SalesChannel.Partner)
-        {
-            if (!User.IsPartner())
-                return Problem(
-                    StatusCodes.Status401Unauthorized,
-                    "API key required",
-                    "Reservations on the Partner channel require a valid X-Api-Key header.",
-                    SecurityErrorCodes.ApiKeyRequired);
-
-            if (!User.HasScope(ApiScopes.ReservationsCreate))
-                return Problem(
-                    StatusCodes.Status403Forbidden,
-                    "Insufficient scope",
-                    $"This API key does not grant the '{ApiScopes.ReservationsCreate}' scope.",
-                    SecurityErrorCodes.InsufficientScope);
-
-            // El colaborador se toma de la credencial, no del cuerpo. El
-            // validador ya rechaza un PartnerId enviado por el cliente, asi que
-            // este es el unico origen posible del valor que se persiste.
-            effective = request with { PartnerId = User.GetPartnerId() };
-        }
-
-        var (reservation, replayed) = await reservations.CreateAsync(effective, idempotencyKey, ct);
+        var (reservation, replayed) = await reservations.CreateAsync(request, idempotencyKey, caller, ct);
 
         // 200 en la reproduccion y 201 solo en la creacion real: el codigo de
         // estado le dice al cliente si su reintento provoco algo nuevo.

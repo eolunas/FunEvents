@@ -1,4 +1,5 @@
 using FunEvents.Application.Users;
+using FunEvents.Application.Users.Dtos;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FunEvents.Api.Controllers;

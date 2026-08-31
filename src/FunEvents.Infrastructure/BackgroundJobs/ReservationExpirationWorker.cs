@@ -1,6 +1,5 @@
 using FunEvents.Domain.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -32,47 +31,32 @@ public sealed class ReservationExpirationOptions
 public class ReservationExpirationWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<ReservationExpirationWorker> logger,
-    IOptions<ReservationExpirationOptions> options) : BackgroundService
+    IOptions<ReservationExpirationOptions> options)
+    : PeriodicBackgroundService(options.Value.PollingInterval, logger)
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteTickAsync(CancellationToken ct)
     {
-        logger.LogInformation(
+        try
+        {
+            var released = await ProcessBatchAsync(ct);
+            if (released > 0)
+                logger.LogInformation("Expired {Count} reservation(s)", released);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Un fallo puntual (base de datos reiniciandose, deadlock) no debe
+            // tumbar el worker: se registra y se reintenta en el siguiente tick.
+            logger.LogError(ex, "Error processing reservation expirations");
+        }
+    }
+
+    protected override void OnStarting()
+        => logger.LogInformation(
             "ReservationExpirationWorker started (interval {Interval}s, batch {BatchSize})",
             options.Value.PollingInterval.TotalSeconds, options.Value.BatchSize);
 
-        using var timer = new PeriodicTimer(options.Value.PollingInterval);
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                var released = await ProcessBatchAsync(stoppingToken);
-                if (released > 0)
-                    logger.LogInformation("Expired {Count} reservation(s)", released);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                // Un fallo puntual (base de datos reiniciandose, deadlock) no debe
-                // tumbar el worker: se registra y se reintenta en el siguiente tick.
-                logger.LogError(ex, "Error processing reservation expirations");
-            }
-
-            try
-            {
-                if (!await timer.WaitForNextTickAsync(stoppingToken)) break;
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-        }
-
-        logger.LogInformation("ReservationExpirationWorker stopped");
-    }
+    protected override void OnStopped()
+        => logger.LogInformation("ReservationExpirationWorker stopped");
 
     private async Task<int> ProcessBatchAsync(CancellationToken ct)
     {

@@ -1,6 +1,5 @@
 using FunEvents.Domain.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -29,49 +28,33 @@ public sealed class IdempotencyCleanupOptions
 public class IdempotencyCleanupWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<IdempotencyCleanupWorker> logger,
-    IOptions<IdempotencyCleanupOptions> options) : BackgroundService
+    IOptions<IdempotencyCleanupOptions> options)
+    : PeriodicBackgroundService(options.Value.PollingInterval, logger)
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteTickAsync(CancellationToken ct)
     {
-        logger.LogInformation(
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var store = scope.ServiceProvider.GetRequiredService<IIdempotencyStore>();
+
+            var cutoff = DateTimeOffset.UtcNow - options.Value.Retention;
+            var purged = await store.PurgeOlderThanAsync(cutoff, ct);
+
+            if (purged > 0)
+                logger.LogInformation("Purged {Count} idempotency key(s) older than {Cutoff:u}", purged, cutoff);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Error purging idempotency keys");
+        }
+    }
+
+    protected override void OnStarting()
+        => logger.LogInformation(
             "IdempotencyCleanupWorker started (retention {Retention}h, interval {Interval}h)",
             options.Value.Retention.TotalHours, options.Value.PollingInterval.TotalHours);
 
-        using var timer = new PeriodicTimer(options.Value.PollingInterval);
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                var store = scope.ServiceProvider.GetRequiredService<IIdempotencyStore>();
-
-                var cutoff = DateTimeOffset.UtcNow - options.Value.Retention;
-                var purged = await store.PurgeOlderThanAsync(cutoff, stoppingToken);
-
-                if (purged > 0)
-                    logger.LogInformation("Purged {Count} idempotency key(s) older than {Cutoff:u}",
-                        purged, cutoff);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error purging idempotency keys");
-            }
-
-            try
-            {
-                if (!await timer.WaitForNextTickAsync(stoppingToken)) break;
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-        }
-
-        logger.LogInformation("IdempotencyCleanupWorker stopped");
-    }
+    protected override void OnStopped()
+        => logger.LogInformation("IdempotencyCleanupWorker stopped");
 }

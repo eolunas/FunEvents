@@ -43,12 +43,7 @@ public class Event : BaseEntity
     public Event(string name, string description, string venue, DateTimeOffset startDate,
         DateTimeOffset endDate, int capacity, Guid? partnerId = null)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            throw new DomainException("Event name is required.", EventErrors.InvalidName);
-        if (capacity <= 0)
-            throw new DomainException("Capacity must be greater than zero.", EventErrors.InvalidCapacity);
-        if (endDate <= startDate)
-            throw new DomainException("End date must be after start date.", EventErrors.InvalidDates);
+        ValidateDetails(name, capacity, startDate, endDate);
 
         Name = name;
         Description = description ?? string.Empty;
@@ -86,12 +81,8 @@ public class Event : BaseEntity
     public void UpdateDetails(string name, string description, string venue,
         DateTimeOffset startDate, DateTimeOffset endDate, int capacity)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            throw new DomainException("Event name is required.", EventErrors.InvalidName);
-        if (capacity <= 0)
-            throw new DomainException("Capacity must be greater than zero.", EventErrors.InvalidCapacity);
-        if (endDate <= startDate)
-            throw new DomainException("End date must be after start date.", EventErrors.InvalidDates);
+        ValidateDetails(name, capacity, startDate, endDate);
+
         if (capacity < ReservedCount)
             throw new DomainException(
                 $"Capacity cannot be lower than the {ReservedCount} tickets already reserved.",
@@ -104,6 +95,16 @@ public class Event : BaseEntity
         EndDate = endDate;
         Capacity = capacity;
         Touch();
+    }
+
+    private static void ValidateDetails(string name, int capacity, DateTimeOffset startDate, DateTimeOffset endDate)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainException("Event name is required.", EventErrors.InvalidName);
+        if (capacity <= 0)
+            throw new DomainException("Capacity must be greater than zero.", EventErrors.InvalidCapacity);
+        if (endDate <= startDate)
+            throw new DomainException("End date must be after start date.", EventErrors.InvalidDates);
     }
 }
 

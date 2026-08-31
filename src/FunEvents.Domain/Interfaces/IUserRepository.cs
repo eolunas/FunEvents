@@ -4,8 +4,10 @@ namespace FunEvents.Domain.Interfaces;
 
 public interface IUserRepository
 {
+    /// <summary><see langword="null"/> si el usuario no existe.</summary>
     Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>Comprobacion de existencia sin materializar la entidad.</summary>
     Task<bool> ExistsAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>

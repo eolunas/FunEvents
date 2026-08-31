@@ -2,15 +2,12 @@ using System.Text.Json.Serialization;
 using FunEvents.Api.Errors;
 using FunEvents.Api.Filters;
 using FunEvents.Api.Middleware;
+using FunEvents.Api.OpenApi;
 using FunEvents.Api.Security;
 using FunEvents.Application;
 using FunEvents.Infrastructure;
 using FunEvents.Infrastructure.Data;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-// Microsoft.OpenApi 2.x colapso el namespace Microsoft.OpenApi.Models dentro de
-// Microsoft.OpenApi. Como Microsoft.AspNetCore.OpenApi 10.x arrastra la version 2.x,
-// el using antiguo (Microsoft.OpenApi.Models) ya no resuelve.
-using Microsoft.OpenApi;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,18 +48,9 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // SecurityServiceCollectionExtensions.
 builder.Services.AddFunEventsSecurity(builder.Configuration);
 
-// ProblemDetails (RFC 9457) como formato unico de error de toda la API.
-builder.Services.AddProblemDetails(options =>
-{
-    options.CustomizeProblemDetails = context =>
-    {
-        context.ProblemDetails.Extensions["traceId"] =
-            System.Diagnostics.Activity.Current?.Id ?? context.HttpContext.TraceIdentifier;
-
-        if (context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.ItemKey, out var correlationId))
-            context.ProblemDetails.Extensions["correlationId"] = correlationId;
-    };
-});
+// ProblemDetails (RFC 9457) como formato unico de error de toda la API. Ver
+// ProblemDetailsServiceCollectionExtensions.
+builder.Services.AddFunEventsProblemDetails();
 
 // El orden importa: se evalua el primero registrado. El especifico antes que
 // el generico, o el generico se tragaria todas las excepciones de dominio.
@@ -70,30 +58,10 @@ builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "FunEvents API",
-        Version = "v1",
-        Description =
-            "API de venta y reserva de entradas multicanal (portal propio, oficinas y colaboradores).\n\n" +
-            "POST /api/v1/reservations exige el header Idempotency-Key: reintentar con la misma key " +
-            "devuelve la reserva original en lugar de crear una segunda.\n\n" +
-            "El canal Partner exige ademas el header X-Api-Key. El catalogo es publico."
-    });
 
-    // Declarar el esquema en OpenAPI no es cosmetico: es lo que permite a un
-    // colaborador generar un cliente que ya sabe donde va la credencial, y lo
-    // que habilita el boton "Authorize" de esta misma pagina.
-    options.AddSecurityDefinition(ApiKeyDefaults.Scheme, new OpenApiSecurityScheme
-    {
-        Name = "X-Api-Key",
-        Type = SecuritySchemeType.ApiKey,
-        In = ParameterLocation.Header,
-        Description = "Clave del colaborador. Solo es necesaria para el canal Partner."
-    });
-});
+// Swagger/OpenAPI, incluido el esquema de seguridad de la API Key. Ver
+// SwaggerServiceCollectionExtensions.
+builder.Services.AddFunEventsSwagger();
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database", tags: ["ready"]);

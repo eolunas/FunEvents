@@ -48,8 +48,6 @@ public class ApiKeyRejectionMiddleware(RequestDelegate next, IOptions<SecurityOp
 public static class SecurityErrorCodes
 {
     public const string InvalidApiKey = "INVALID_API_KEY";
-    public const string ApiKeyRequired = "API_KEY_REQUIRED";
-    public const string InsufficientScope = "INSUFFICIENT_SCOPE";
     public const string RateLimitExceeded = "RATE_LIMIT_EXCEEDED";
 }
 

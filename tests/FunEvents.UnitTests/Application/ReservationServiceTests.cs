@@ -181,6 +181,41 @@ public class ReservationServiceTests
         result.Replayed.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Canal_Partner_sin_credencial_lanza_PartnerCredentialRequired()
+    {
+        var request = Request() with { Channel = SalesChannel.Partner };
+
+        var act = async () => await BuildSut().CreateAsync(request, Key, ReservationCaller.Anonymous);
+
+        (await act.Should().ThrowAsync<DomainException>())
+            .Which.ErrorCode.Should().Be(ReservationErrors.PartnerCredentialRequired);
+    }
+
+    [Fact]
+    public async Task Canal_Partner_con_credencial_pero_sin_scope_lanza_InsufficientScope()
+    {
+        var request = Request() with { Channel = SalesChannel.Partner };
+        var caller = new ReservationCaller(IsPartner: true, HasCreateScope: false, PartnerId: Guid.NewGuid());
+
+        var act = async () => await BuildSut().CreateAsync(request, Key, caller);
+
+        (await act.Should().ThrowAsync<DomainException>())
+            .Which.ErrorCode.Should().Be(ReservationErrors.InsufficientScope);
+    }
+
+    [Fact]
+    public async Task Canal_Partner_con_credencial_valida_toma_el_PartnerId_de_la_credencial()
+    {
+        var partnerId = Guid.NewGuid();
+        var request = Request() with { Channel = SalesChannel.Partner };
+        var caller = new ReservationCaller(IsPartner: true, HasCreateScope: true, PartnerId: partnerId);
+
+        var result = await BuildSut().CreateAsync(request, Key, caller);
+
+        result.Reservation.PartnerId.Should().Be(partnerId);
+    }
+
     // -----------------------------------------------------------------
     // Idempotencia
     // -----------------------------------------------------------------

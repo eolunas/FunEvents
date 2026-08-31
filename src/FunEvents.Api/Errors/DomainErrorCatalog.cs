@@ -30,6 +30,10 @@ public static class DomainErrorCatalog
     private static readonly IReadOnlyDictionary<string, (int Status, string Title)> Map =
         new Dictionary<string, (int, string)>(StringComparer.Ordinal)
         {
+            // --- 401/403: fallos de autenticacion/autorizacion del canal Partner ---
+            [ReservationErrors.PartnerCredentialRequired] = (StatusCodes.Status401Unauthorized, "API key required"),
+            [ReservationErrors.InsufficientScope] = (StatusCodes.Status403Forbidden, "Insufficient scope"),
+
             // --- 404: el recurso referenciado no existe ---
             [ReservationErrors.EventNotFound] = (StatusCodes.Status404NotFound, "Event not found"),
             [ReservationErrors.UserNotFound] = (StatusCodes.Status404NotFound, "User not found"),

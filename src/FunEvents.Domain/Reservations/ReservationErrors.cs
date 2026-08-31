@@ -26,4 +26,10 @@ public static class ReservationErrors
 
     /// <summary>La Idempotency-Key ya se uso con un cuerpo de peticion distinto.</summary>
     public const string IdempotencyKeyReused = "IDEMPOTENCY_KEY_REUSED";
+
+    /// <summary>El canal Partner exige una API Key valida.</summary>
+    public const string PartnerCredentialRequired = "API_KEY_REQUIRED";
+
+    /// <summary>La API Key es valida pero no concede el permiso necesario.</summary>
+    public const string InsufficientScope = "INSUFFICIENT_SCOPE";
 }

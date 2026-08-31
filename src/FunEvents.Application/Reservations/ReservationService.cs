@@ -57,8 +57,11 @@ public class ReservationService(
     private static readonly JsonSerializerOptions ReplayJsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<CreateReservationResult> CreateAsync(
-        CreateReservationRequest request, string idempotencyKey, CancellationToken ct = default)
+        CreateReservationRequest request, string idempotencyKey,
+        ReservationCaller? caller = null, CancellationToken ct = default)
     {
+        request = ResolveEffectiveRequest(request, caller ?? ReservationCaller.Anonymous);
+
         var fingerprint = RequestFingerprint.Compute(
             request.EventId, request.UserId, request.TicketQuantity, request.Channel, request.PartnerId);
 
@@ -99,6 +102,31 @@ public class ReservationService(
         }
     }
 
+    /// <remarks>
+    /// Que una reserva exija credencial de colaborador depende del canal, que
+    /// viaja en el cuerpo de la peticion, no de la ruta: por eso la regla se
+    /// comprueba aqui y no con un atributo de autorizacion en el controlador.
+    /// </remarks>
+    private static CreateReservationRequest ResolveEffectiveRequest(CreateReservationRequest request, ReservationCaller caller)
+    {
+        if (request.Channel != SalesChannel.Partner) return request;
+
+        if (!caller.IsPartner)
+            throw new DomainException(
+                "Reservations on the Partner channel require a valid X-Api-Key header.",
+                ReservationErrors.PartnerCredentialRequired);
+
+        if (!caller.HasCreateScope)
+            throw new DomainException(
+                "This API key does not grant permission to create reservations.",
+                ReservationErrors.InsufficientScope);
+
+        // El colaborador se toma de la credencial, no del cuerpo. El validador
+        // ya rechaza un PartnerId enviado por el cliente, asi que este es el
+        // unico origen posible del valor que se persiste.
+        return request with { PartnerId = caller.PartnerId };
+    }
+
     public async Task<ReservationResponse?> GetByIdAsync(Guid reservationId, CancellationToken ct = default)
     {
         var reservation = await reservations.GetByIdAsync(reservationId, ct);
@@ -107,7 +135,7 @@ public class ReservationService(
         var @event = await events.GetByIdAsync(reservation.EventId, ct);
         var user = await users.GetByIdAsync(reservation.UserId, ct);
 
-        return Map(reservation, @event, user, previouslyCreated: false);
+        return reservation.ToResponse(@event, user, previouslyCreated: false);
     }
     // ------------------------------------------------------------------------
 
@@ -184,7 +212,7 @@ public class ReservationService(
         await reservations.AddAsync(reservation, ct);
         await unitOfWork.SaveChangesAsync(ct);
 
-        var response = Map(reservation, @event, user, previouslyCreated: false);
+        var response = reservation.ToResponse(@event, user, previouslyCreated: false);
 
         // Se guarda la respuesta EXACTA dentro de la misma transaccion: si el
         // commit no llega, no queda rastro de la key y el reintento del cliente
@@ -291,21 +319,4 @@ public class ReservationService(
 
         return new CreateReservationResult(stored with { PreviouslyCreated = true }, Replayed: true);
     }
-
-    private static ReservationResponse Map(
-        Reservation reservation, Event? @event, User? user, bool previouslyCreated) => new()
-    {
-        ReservationId = reservation.Id,
-        EventId = reservation.EventId,
-        EventName = @event?.Name ?? string.Empty,
-        UserId = reservation.UserId,
-        UserName = user?.FullName ?? string.Empty,
-        TicketQuantity = reservation.TicketQuantity,
-        State = reservation.State.ToString(),
-        Channel = reservation.Channel.ToString(),
-        PartnerId = reservation.PartnerId,
-        ExpiresAt = reservation.ExpiresAt,
-        CreatedAt = reservation.CreatedAt,
-        PreviouslyCreated = previouslyCreated
-    };
 }

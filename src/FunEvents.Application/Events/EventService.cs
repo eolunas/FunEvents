@@ -11,7 +11,7 @@ public class EventService(IEventRepository events) : IEventService
     public async Task<EventDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var @event = await events.GetByIdAsync(id, ct);
-        return @event is null ? null : MapToDto(@event);
+        return @event?.ToDto();
     }
 
     public async Task<PagedResponse<EventDto>> GetPagedAsync(
@@ -27,24 +27,10 @@ public class EventService(IEventRepository events) : IEventService
 
         return new PagedResponse<EventDto>
         {
-            Items = items.Select(MapToDto).ToList(),
+            Items = items.Select(e => e.ToDto()).ToList(),
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize
         };
     }
-
-    private static EventDto MapToDto(Domain.Events.Event e) => new()
-    {
-        Id = e.Id,
-        Name = e.Name,
-        Description = e.Description,
-        Venue = e.Venue,
-        StartDate = e.StartDate,
-        EndDate = e.EndDate,
-        Capacity = e.Capacity,
-        ReservedCount = e.ReservedCount,
-        AvailableCapacity = e.AvailableCapacity(),
-        State = e.State.ToString()
-    };
 }
